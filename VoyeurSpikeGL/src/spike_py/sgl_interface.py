@@ -8,8 +8,9 @@ import time
 import numpy as np
 from array import array
 
-import matplotlib.pyplot as plt
 
+class TestInterface(object):
+    acquisition_rate = 20833
 
 class SGLInterface(object):
     '''
@@ -25,7 +26,9 @@ class SGLInterface(object):
         '''
         self.net_client = NetClient(kwargs)
         self.query_acquire()
+        self.acquisition_rate = 20833
         return
+        
     
     def close_connect(self):
         self.net_client.close()
