@@ -19,11 +19,11 @@ class SGLInterface(object):
     acquiring = False
 
 
-    def __init__(self):
+    def __init__(self,**kwargs):
         '''
         Constructor
         '''
-        self.net_client = NetClient()
+        self.net_client = NetClient(kwargs)
         self.query_acquire()
         return
     
@@ -170,7 +170,7 @@ class SGLInterface(object):
     
     
     def get_daq_data(self, end_sample, num_samples, channels, close = True, ):
-        # returns a m by n matrix of m samples from n channels.
+        # returns a m by n matrix of m channels with n samples.
         if not self.acquiring and not self.query_acquire():
             return False
         start_sample = end_sample - num_samples
@@ -196,7 +196,7 @@ class SGLInterface(object):
 #             print 'length buff: '+ str(len(buf))
 #             print 'handshake: ' + handshake + _ + buf
             return None
-        arr.shape = (int(dims[3]),int(dims[2]))
+#         arr.shape = (int(dims[3]),int(dims[2])) THIS WOULD RESHAPE TO BE FORTRANIC.
         return arr
     
     def get_next_data(self, channels, max_read = 5000):
