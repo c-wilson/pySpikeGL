@@ -25,23 +25,35 @@ class SpikeGraph(QtGui.QWidget):
     classdocs
     '''
     pause = False
-    trigger = QtCore.pyqtSignal()
     
+    trigger = QtCore.pyqtSignal()
+    acquisition_trigger = QtCore.pyqtSignal(list, int)
     
     
     def __init__(self, probe_type, system_type, refresh_period_ms = 1000, trigger_ch = None, acquisition_source = 'SpikeGL', **kwargs):
         self.refresh_period_ms = refresh_period_ms
         super(SpikeGraph, self).__init__()
-        if acquisition_source == 'TEST':
-            self.acquisition_interface = TestInterface()
-        if acquisition_source == 'SpikeGL':
-            self.acquisition_interface = SGLInterface()
-        
+
+        self.init_acquisition(acquisition_source)
         probe = probes[probe_type]
         system = systems[system_type]
         self.acquisition_channels = self.combine_channels(probe, system)        
         self.init_ui(probe,self.acquisition_channels)
         self.init_timer()
+    
+    def init_acquisition(self,acquisition_source):
+        
+        
+        self.acquisition_thread = QtCore.QThread()
+        if acquisition_source == 'TEST':
+            self.acquisition_interface = TestInterface()
+        if acquisition_source == 'SpikeGL':
+            self.acquisition_interface = SGLInterface()
+            
+        self.acquisition_interface.moveToThread(self.acquisition_thread)
+        self.acquisition_thread.start()
+        self.acquisition_trigger.connect(self.acquisition_interface.get_next_data)
+        self.acquisition_interface.acquisition_complete.connect(self.update_graphs)
 
 
     
@@ -96,19 +108,31 @@ class SpikeGraph(QtGui.QWidget):
     @QtCore.pyqtSlot()       
     def update(self):
         if not self.pause:
+            self.stime = time.time()
             max_samples = self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000
-            self.new_samples = self.acquisition_interface.get_next_data(self.acquisition_channels,self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000)
+            self.acquisition_trigger.emit(self.acquisition_channels, self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000)
+            
+#             self.new_samples = self.acquisition_interface.get_next_data(self.acquisition_channels,self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000)
 #             print self.new_samples.shape
 #             self.new_samples = 0.01* np.random.randn(64,self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000 )
 #             print self.new_samples.shape
 
-            num_new_samples = self.new_samples.shape[1]
+#             num_new_samples = self.new_samples.shape[1]
             
     #         print 'trigger'
-    #         stime = time.time()
-            self.trigger.emit()
+    #         
+    
+            
 #         time_take = time.time() - stime
 #         print 'done '+ str(time_take)
+    @QtCore.pyqtSlot()       
+    def update_graphs(self):
+        self.new_samples = self.acquisition_interface.data
+        print time.time() - self.stime
+        #TODO: we can probably make this more efficient in not copying this object.
+        self.trigger.emit()
+        print time.time() - self.stime
+        return
         
         
 

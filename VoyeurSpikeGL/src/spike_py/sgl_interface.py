@@ -22,12 +22,15 @@ class SGLInterface(QtCore.QObject):
     '''
     last_sample_read = 0
     acquiring = False
+    acquisition_complete = QtCore.pyqtSignal()
+    
 
 
     def __init__(self,**kwargs):
         '''
         Constructor
         '''
+        super(SGLInterface,self).__init__()
         self.net_client = NetClient()
         self.query_acquire()
         self.acquisition_rate = 20833
@@ -178,6 +181,8 @@ class SGLInterface(QtCore.QObject):
     
     def get_daq_data(self, end_sample, num_samples, channels, close = True, ):
         # returns a m by n matrix of m channels with n samples.
+        
+        
         if not self.acquiring and not self.query_acquire():
             return False
         start_sample = end_sample - num_samples
@@ -198,16 +203,18 @@ class SGLInterface(QtCore.QObject):
             self.buf = self.buf + self.net_client.recieve_ok(20971520, close, 20)
             print 'short'
         try:
-            self.arr = np.array(array('h',self.buf[:-3]))
+            self.data = np.array(array('h',self.buf[:-3]))
         except:
 #             print bufstr
 #             print 'length buff: '+ str(len(buf))
 #             print 'handshake: ' + handshake + _ + buf
             return None
-        self.arr.shape = (int(dims[3]),int(dims[2]))
+        self.data.shape = (int(dims[3]),int(dims[2]))
 #         arr.shape = (int(dims[3]),int(dims[2])) THIS WOULD RESHAPE TO BE FORTRANIC.
-        return self.arr.T
+        self.data = self.data.T
+        return
     
+    @QtCore.pyqtSlot(list, int) 
     def get_next_data(self, channels, max_read = 5000):
         if self.acquiring or self.query_acquire():
             self.acquiring = True
@@ -220,7 +227,9 @@ class SGLInterface(QtCore.QObject):
         if num_samples == 0:
             return None
         self.last_sample_read = current_sample
-        return self.get_daq_data(current_sample, num_samples, channels, False)
+        self.get_daq_data(current_sample, num_samples, channels, False)
+        self.acquisition_complete.emit()
+        return
     
     
 class NetClient(object):
