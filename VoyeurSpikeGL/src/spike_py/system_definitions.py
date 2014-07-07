@@ -33,7 +33,7 @@ class AbstractSystem(object):
         return
     
 class Acute2System(AbstractSystem):
-    return
+    pass
 
 
-system_definition = {'acute2' : Acute2System}
+systems = {'acute2' : Acute2System}

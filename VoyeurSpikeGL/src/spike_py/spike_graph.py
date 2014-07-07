@@ -7,35 +7,45 @@ import galry
 import numpy as np
 import scipy as sp
 from probe_definitions import probes
-from system_definition import systems
+from system_definitions import systems
 from sgl_interface import SGLInterface, TestInterface
 from PyQt4 import QtCore, QtGui
 import time
+
+
+class Main(QtGui.QMainWindow):
+    def keyPressEvent(self, event):
+        print 'press'
+
+
 
 
 class SpikeGraph(QtGui.QWidget):
     '''
     classdocs
     '''
-    
+    pause = False
     trigger = QtCore.pyqtSignal()
-    def __init__(self, probe_type, refresh_period_ms = 1000, trigger_ch = None, acquisition_source = 'SpikeGL', **kwargs):
-        self.refresh_period_ms = 1000
+    
+    
+    
+    def __init__(self, probe_type, system_type, refresh_period_ms = 1000, trigger_ch = None, acquisition_source = 'SpikeGL', **kwargs):
+        self.refresh_period_ms = refresh_period_ms
         super(SpikeGraph, self).__init__()
         if acquisition_source == 'TEST':
-            self.acquisition_interface = TestInterface
+            self.acquisition_interface = TestInterface()
         if acquisition_source == 'SpikeGL':
             self.acquisition_interface = SGLInterface()
         
         probe = probes[probe_type]
-        system = system_definition[system]
-        self.acquisition_channels = self.combine_channels(probe,system)        
+        system = systems[system_type]
+        self.acquisition_channels = self.combine_channels(probe, system)        
         self.init_ui(probe,self.acquisition_channels)
         self.init_timer()
 
+
     
-    
-    def combine_channels(self, probe): #defines a global channel list which will be used to pull data from acquisition source.
+    def combine_channels(self, probe, system): #defines a global channel list which will be used to pull data from acquisition source.
         acquisition_channels = []
         channel_idx = []
         for idx, window in enumerate(probe.window_params):
@@ -56,9 +66,21 @@ class SpikeGraph(QtGui.QWidget):
             window.addWidget(widget, position[0],position[1],position[2],position[3])
         
         self.setLayout(window)      
+    
+    def keyPressEvent(self, event):
+        print 'press'
+        if type(event) == QtGui.QKeyEvent:
+            print event.key()
+            if event.key() == QtCore.Qt.Key_P:
+                self.pause_update()
+            event.accept()
         
-        self.setGeometry(300, 300, 600, 600)  
-        
+    def pause_update(self):
+        if self.pause:
+            self.pause = False
+        else:
+            self.pause = True
+            
     def init_timer(self):
         #make timer for getting information from acquisition system
         self.timer = QtCore.QTimer()
@@ -73,14 +95,18 @@ class SpikeGraph(QtGui.QWidget):
     
     @QtCore.pyqtSlot()       
     def update(self):
-        max_samples = self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000
-#         new_samples = self.acquisition_interface.get_next_data(max_samples = max_samples)
-        self.new_samples = 0.01* np.random.randn(64,self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000 *2)
-        num_new_samples = self.new_samples.shape[1]
-        
-#         print 'trigger'
-#         stime = time.time()
-        self.trigger.emit()
+        if not self.pause:
+            max_samples = self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000
+            self.new_samples = self.acquisition_interface.get_next_data(self.acquisition_channels,self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000)
+#             print self.new_samples.shape
+#             self.new_samples = 0.01* np.random.randn(64,self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000 )
+#             print self.new_samples.shape
+
+            num_new_samples = self.new_samples.shape[1]
+            
+    #         print 'trigger'
+    #         stime = time.time()
+            self.trigger.emit()
 #         time_take = time.time() - stime
 #         print 'done '+ str(time_take)
         
@@ -88,6 +114,7 @@ class SpikeGraph(QtGui.QWidget):
 
 class GraphWidget(galry.GalryWidget):
     pause = False
+    _pause_ui = False
     pause_label = 'Pause'
     
     def __init__(self, params, global_channel_mapping, parent):
@@ -107,7 +134,7 @@ class GraphWidget(galry.GalryWidget):
         return channel_map_array
         
     def mouseDoubleClickEvent(self,event):
-        print 'CME!'
+        self.pause_update_ui()
         self.popMenu = QtGui.QMenu()
         anaction = self.popMenu.addAction(QtGui.QAction(self.pause_label, self,
                 statusTip="Cut the current selection's contents to the clipboard",
@@ -117,17 +144,34 @@ class GraphWidget(galry.GalryWidget):
                 triggered=self.interaction_manager.processors['navigation'].process_reset_event))
 
         self.popMenu.exec_(event.globalPos())
-        
+        self.pause_update_ui()
         return
     
-    def pause_update(self):
-        if self.pause:
-            self.pause = False
-            self.pause_label = 'Pause'
-        else:
-            self.pause = True
-            self.pause_label = 'Unpause'
-    
+    def mousePressEvent(self, e):
+        self._pause_ui = True
+        if self.mouse_blocked:
+            return
+        self.user_action_generator.mousePressEvent(e)
+        self.process_interaction()
+        
+    def mouseReleaseEvent(self, e):
+        if self.mouse_blocked:
+            return
+        self.user_action_generator.mouseReleaseEvent(e)
+        self.process_interaction()    
+        self._pause_ui =  False
+        
+    def keyPressEvent(self, e):
+        if e.key() == QtCore.Qt.Key_P: # pause, global, propagate to main widget.
+            e.ignore()
+        pass
+#         self.user_action_generator.keyPressEvent(e)
+#         self.process_interaction()
+#         # Close the application when pressing Q
+#         if e.key() == QtCore.Qt.Key_Q:
+#             if hasattr(self, 'window'):
+#                 self.close_widget()
+
     
     def initialize(self):
         self.set_bindings(galry.PlotBindings)
@@ -139,21 +183,30 @@ class GraphWidget(galry.GalryWidget):
     
     @QtCore.pyqtSlot()
     def update_graph_data(self):
-        if not self.pause:
+        if not self.pause and not self._pause_ui:
             self.samples = self.parent_widget.new_samples[self.channel_mapping]
             self.p_samples = self.samples * self.interaction_manager.processors['navigation'].scalar + self.offsets
-            #num_samples = self.samples.shape[1]
-    #         if num_samples != self.num_samples:
-    #             self.num_samples = num_samples
-    #             self.x = np.tile(np.linspace(-1., 1., num_samples), (len(self.channels), 1))
-    
-            self.paint_manager.set_data(position=np.vstack((self.x.ravel(), self.p_samples.ravel())).T)
-            self.updateGL()
+            num_samples = self.samples.shape[1]
+            if num_samples != self.num_samples:
+                self.num_samples = num_samples
+                self.x = np.tile(np.linspace(-1., 1., num_samples), (len(self.channels), 1))
+                
+                self.paint_manager.reinitialize_visual(visual = 'plots', x = self.x, y = self.p_samples, autocolor = True)
+                self.updateGL()
+            else:
+                self.paint_manager.set_data(visual = 'plots',position=np.vstack((self.x.ravel(), self.p_samples.ravel())).T, )
+                self.updateGL()
+            return
+        else:
+            pass
 
     def zoom_y(self):
-        self.processed_samples = self.samples * self.interaction_manager.processors['navigation'].scalar + self.offsets
-        self.paint_manager.set_data(position=np.vstack((self.x.ravel(), self.processed_samples.ravel())).T)
-        self.updateGL()          
+        if hasattr(self,'samples'):
+            self.processed_samples = self.samples * self.interaction_manager.processors['navigation'].scalar + self.offsets
+            self.paint_manager.set_data(visual = 'plots', position=np.vstack((self.x.ravel(), self.processed_samples.ravel())).T)
+            self.updateGL()   
+        else:
+            pass
 
 
     def calculate_offsets(self):
@@ -164,12 +217,27 @@ class GraphWidget(galry.GalryWidget):
         self.offsets = np.linspace((y_limits[0]+end_step_size), (y_limits[1]-end_step_size), steps)[:,np.newaxis]        
         return self.offsets
 
+    @QtCore.pyqtSlot()
+    def pause_update(self):
+        if self.pause:
+            self.pause = False
+            self.pause_label = 'Pause'
+        else:
+            self.pause = True
+            self.pause_label = 'Unpause'
+        return
+    def pause_update_ui(self): 
+        if self._pause_ui:
+            self._pause_ui = False
+        else:
+            self._pause_ui = True
     
 class MyPaintManager(galry.PlotPaintManager):
     def initialize(self):
-        self.parent.y = .01 * np.random.randn(self.parent.channels.size, 20833*2) + self.parent.calculate_offsets()
-        self.parent.x = np.tile(np.linspace(-1., 1., 20833*2), (self.parent.channels.size, 1))
-        self.add_visual(galry.PlotVisual, x=self.parent.x, y=self.parent.y, autocolor = True,)
+        self.parent.y = .01 * np.random.randn(self.parent.channels.size, 20833) + self.parent.calculate_offsets()
+        self.parent.x = np.tile(np.linspace(-1., 1., 20833), (self.parent.channels.size, 1))
+        self.add_visual(galry.PlotVisual, x=self.parent.x, y=self.parent.y, autocolor = True, name = 'plots')
+        self.parent.num_samples = self.parent.y.shape[1]
         
 class MyPlotInteractionManager(galry.DefaultInteractionManager):
     def initialize_default(self, constrain_navigation=True,
@@ -222,21 +290,26 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
     def reset(self):
         """Reset the navigation."""
         self.tx, self.ty, self.tz = 0., 0., 0.
-        self.sx, self.sy = 1., 1.
-        self.scalar = 1.
-        self.sxl, self.syl = 1., 1.
+        self.sx, self.sy = .01, .01
+        self.scalar = 2.31757045631e-05
+        self.sxl, self.syl = .01, .01
         self.rx, self.ry = 0., 0.
         self.navigation_rectangle = None
+        self.parent.zoom_y()
     
 
 app = QtGui.QApplication([])
-mw = QtGui.QMainWindow()
-a = SpikeGraph('J_HIRES_4x16', acquisition_source = 'TEST') 
+mw = Main()
+a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL') 
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
 mw.setCentralWidget(a)
-
+mw.setWindowTitle('SPIKES WITH PYTHON!')
+dim = QtCore.QRect(1700,-650,1000,1800)
+mw.setGeometry(dim)
+# mw.showFullScreen()
+mw.showMaximized()
 # p = a.palette()
 # p.setColor(a.backgroundRole(), QtCore.Qt.black)
 # a.setPalette(p)

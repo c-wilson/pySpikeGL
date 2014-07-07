@@ -7,12 +7,16 @@ import socket
 import time
 import numpy as np
 from array import array
+from PyQt4 import QtCore
 
 
 class TestInterface(object):
     acquisition_rate = 20833
+    def get_next_data(self, channels, max_read = 50000):
+        return 0.01* np.random.randn(len(channels),self.acquisition_rate *2 )
+    
 
-class SGLInterface(object):
+class SGLInterface(QtCore.QObject):
     '''
     classdocs
     '''
@@ -24,7 +28,7 @@ class SGLInterface(object):
         '''
         Constructor
         '''
-        self.net_client = NetClient(kwargs)
+        self.net_client = NetClient()
         self.query_acquire()
         self.acquisition_rate = 20833
         return
@@ -183,24 +187,26 @@ class SGLInterface(object):
         for ch in channels:
             chan_str = chan_str + str(ch) + '#'
         line = 'GETDAQDATA '+ str(start_sample) + ' ' + str(num_samples) + ' ' + chan_str + ' 1'
-        print line
+#         print line
         self.net_client.send_string(line)
-        bufstr = self.net_client.recieve_ok(20971520, close, 20, True)
-        print 'length buffer' +str(len(bufstr))
-        handshake,_,buf = bufstr.partition('\n')
+        self.bufstr = self.net_client.recieve_ok(20971520, close, 200, True)
+#         print 'length buffer' +str(len(self.bufstr))
+        handshake,_,self.buf = self.bufstr.partition('\n')
         dims = handshake.split(' ')
-        if len(buf)< int(dims[2])*int(dims[3]) + 2:
-            buf = buf + self.net_client.recieve_ok(20971520, close, 20)
+#         print dims
+        if len(self.buf)< int(dims[2])*int(dims[3]) + 2:
+            self.buf = self.buf + self.net_client.recieve_ok(20971520, close, 20)
             print 'short'
         try:
-            arr = np.array(array('h',buf[:-3]))
+            self.arr = np.array(array('h',self.buf[:-3]))
         except:
-            print bufstr
+#             print bufstr
 #             print 'length buff: '+ str(len(buf))
 #             print 'handshake: ' + handshake + _ + buf
             return None
+        self.arr.shape = (int(dims[3]),int(dims[2]))
 #         arr.shape = (int(dims[3]),int(dims[2])) THIS WOULD RESHAPE TO BE FORTRANIC.
-        return arr
+        return self.arr.T
     
     def get_next_data(self, channels, max_read = 5000):
         if self.acquiring or self.query_acquire():
@@ -213,9 +219,8 @@ class SGLInterface(object):
             num_samples = max_read
         if num_samples == 0:
             return None
-        samples = self.get_daq_data(current_sample, num_samples, channels, False)
         self.last_sample_read = current_sample
-        return num_samples, samples
+        return self.get_daq_data(current_sample, num_samples, channels, False)
     
     
 class NetClient(object):
@@ -306,14 +311,18 @@ class NetClient(object):
     
 if __name__ == '__main__':
     test = SGLInterface()
-    a=test.get_next_data([1],10000)
+    a=test.get_next_data(range(63),20800)
     a = a[1]
     time.sleep(0.1)
     for i in range (400):
-        u = test.get_next_data([1],10000)
+        o = time.time()
+        u = test.get_next_data(range(63),10000)
+        print time.time() - o
         if u:
             a = np.append(a, u[1], 0)
+        
         time.sleep(0.1)
+        
         print str(i)
     plt.plot(a)
     plt.show()

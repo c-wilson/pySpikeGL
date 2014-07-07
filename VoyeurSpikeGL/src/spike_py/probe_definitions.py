@@ -56,7 +56,7 @@ class J_HIRES_4x16(AbstractProbe):
                    'site_numbers'  :    np.array([10, 7, 9, 8,12, 5,11, 6,14, 3,13, 4,16, 1,15, 2]),
                    'grid_position' :    (0,0,1,1)
                    }
-        window2 = {'channels' :         np.array([29, 7,27,25, 6, 5,25, 4,28, 3,26, 2,24, 1,30, 0]),
+        window2 = {'channels' :         np.array([29, 7,27,25, 6, 5,31, 4,28, 3,26, 2,24, 1,30, 0]),
                    'site_numbers' :     np.array([26,23,25,24,28,21,27,22,30,19,29,20,32,17,31,18]),
                    'grid_position' :    (0,1,1,1)
                    }
