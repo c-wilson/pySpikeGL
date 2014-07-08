@@ -24,22 +24,32 @@ class SpikeGraph(QtGui.QWidget):
     '''
     classdocs
     '''
-    pause = False
+    pause = False # pauses graphing updates AND acquisition.
+    pause_ui = False #only pauses the ui, not the acquisition.
     
     trigger = QtCore.pyqtSignal()
     acquisition_trigger = QtCore.pyqtSignal(list, int)
+    _pause_ui_sig = QtCore.pyqtSignal()
+    last_trigger_idx = 0
+    _head_idx = 0
+    triggering = False
+    triggered = False
+    buffer_len = 20833*5
     
-    
-    def __init__(self, probe_type, system_type, refresh_period_ms = 1000, trigger_ch = None, acquisition_source = 'SpikeGL', **kwargs):
+    def __init__(self, probe_type, system_type, refresh_period_ms = 1000, display_period = 1000, trigger_ch = 1, acquisition_source = 'SpikeGL', **kwargs):
         self.refresh_period_ms = refresh_period_ms
+        self.display_period = display_period
         super(SpikeGraph, self).__init__()
-
+        self.trigger_ch = trigger_ch
         self.init_acquisition(acquisition_source)
         probe = probes[probe_type]
         system = systems[system_type]
         self.acquisition_channels = self.combine_channels(probe, system)        
         self.init_ui(probe,self.acquisition_channels)
         self.init_timer()
+        self.samples = np.zeros((len(self.acquisition_channels),self.buffer_len),dtype = np.float32)
+        self._pause_ui_sig.connect(self.pause_update_ui)
+        print self.samples.shape
     
     def init_acquisition(self,acquisition_source):
         
@@ -54,6 +64,7 @@ class SpikeGraph(QtGui.QWidget):
         self.acquisition_thread.start()
         self.acquisition_trigger.connect(self.acquisition_interface.get_next_data)
         self.acquisition_interface.acquisition_complete.connect(self.update_graphs)
+        return
 
 
     
@@ -85,13 +96,29 @@ class SpikeGraph(QtGui.QWidget):
             print event.key()
             if event.key() == QtCore.Qt.Key_P:
                 self.pause_update()
+            if event.key() == QtCore.Qt.Key_T:
+                self.set_triggering_mode()
             event.accept()
+    def set_triggering_mode(self):
+        if self.triggering:
+            self.triggering = False
+        else:
+            self.triggering = True
+            print 'Trigger mode set: waiting for trigger on ch: ' + str(self.trigger_ch)
+        return
         
     def pause_update(self):
         if self.pause:
             self.pause = False
         else:
             self.pause = True
+    
+    @QtCore.pyqtSlot()
+    def pause_update_ui(self):
+        if self.pause_ui:
+            self.pause_ui = False
+        else:
+            self.pause_ui = True
             
     def init_timer(self):
         #make timer for getting information from acquisition system
@@ -108,32 +135,65 @@ class SpikeGraph(QtGui.QWidget):
     @QtCore.pyqtSlot()       
     def update(self):
         if not self.pause:
-#             self.stime = time.time()
-            max_samples = self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000
-            self.acquisition_trigger.emit(self.acquisition_channels, self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000)
-            
-#             self.new_samples = self.acquisition_interface.get_next_data(self.acquisition_channels,self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000)
-#             print self.new_samples.shape
-#             self.new_samples = 0.01* np.random.randn(64,self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000 )
-#             print self.new_samples.shape
+            self.acquisition_trigger.emit(self.acquisition_channels, self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000*1.5)
 
-#             num_new_samples = self.new_samples.shape[1]
-            
-    #         print 'trigger'
-    #         
-    
-            
-#         time_take = time.time() - stime
 #         print 'done '+ str(time_take)
     @QtCore.pyqtSlot()       
     def update_graphs(self):
-#         print time.time() - self.stime
-
-        self.new_samples = self.acquisition_interface.data
-        #TODO: we can probably make this more efficient in not copying this object.
-        self.trigger.emit()
-#         print time.time() - self.stime
+        self.stime = time.time()
+        self.new_samples =  self.acquisition_interface.data
+#         start = self.samples.shape[1]-self.new_samples.shape[1]
+#         print start
+        #roll the sample buffer, this implementation is far faster than rolling the buffer ~4ms, we can probably 
+        #make this more efficient by using a ring index.
+        new_head_idx = (self._head_idx+self.new_samples.shape[1])%self.buffer_len
+        if new_head_idx < self._head_idx:
+            self.samples[:,(self._head_idx):] = self.new_samples[:,:-new_head_idx]
+            self.samples[:,:new_head_idx] = self.new_samples[:,-(new_head_idx):]
+        else:        
+            self.samples[:,self._head_idx:new_head_idx] = self.new_samples[:,:]       
+        
+        self._head_idx = new_head_idx
+        
+        if self.pause_ui: #we don't need to mess with anything else here, so lets get out.
+            return
+        
+        if not self.triggering:
+            disp_start_idx = (self._head_idx - (self.acquisition_interface.acquisition_rate * self.display_period/1000))%self.buffer_len
+            if disp_start_idx > self._head_idx:
+                self.disp_samples[:,:-self._head_idx] = self.samples[:,disp_start_idx:]
+                self.disp_samples[:,-self._head_idx:] = self.samples[:,:self._head_idx]
+            else:
+                self.disp_samples = self.samples[:,disp_start_idx:self._head_idx]
+            self.trigger.emit()
+        elif self.triggering and not self.triggered:
+            self.find_trigger()
+            
+        if self.triggering and self.triggered:
+            if (self._head_idx - self.last_trigger_idx)%self.buffer_len > self.disp_samples:
+                self.triggered = False
+                # update display
+                disp_start_idx = self.last_trigger_idx
+                if disp_start_idx > self._head_idx:
+                    self.disp_samples[:,:-self._head_idx] = self.samples[:,disp_start_idx:]
+                    self.disp_samples[:,-self._head_idx:] = self.samples[:,:self._head_idx]
+                else:
+                    self.disp_samples = self.samples[:,disp_start_idx:self._head_idx]
+            self.trigger.emit()        
         return
+        
+        
+    def find_trigger(self):
+        self.th = self.samples[self.trigger_ch,:] > np.float32(3.3) #TTL threshold rounded down.
+        if np.any(self.th):
+            th_edges = np.convolve([1, -1], self.th, mode='same')
+            th_idx = np.where(th_edges == 1)[-1] #THIS IS FOR UPWARD EDGES!
+            if self.last_trigger_idx != th_idx: #very very rare that two triggers will happen in the same idx position.
+                self.triggered = True
+                self.last_trigger_idx
+        
+                
+        
         
         
 
@@ -141,6 +201,7 @@ class GraphWidget(galry.GalryWidget):
     pause = False
     _pause_ui = False
     pause_label = 'Pause'
+    
     
     def __init__(self, params, global_channel_mapping, parent):
         self.parent_widget = parent
@@ -150,6 +211,7 @@ class GraphWidget(galry.GalryWidget):
         self.position = params['grid_position']
         self.num_samples = 0
         super(GraphWidget,self).__init__()
+        parent._pause_ui_sig.connect(self.pause_update_ui)
         
     def calculate_channel_mapping(self, channel_mapping): #calculate where each channel is within the acquisition matrix. This will be used to pull data from the acquisition source matrix.
         channel_map_array = np.array([], dtype = int)
@@ -173,7 +235,7 @@ class GraphWidget(galry.GalryWidget):
         return
     
     def mousePressEvent(self, e):
-        self._pause_ui = True
+        self.parent_widget._pause_ui_sig.emit()
         if self.mouse_blocked:
             return
         self.user_action_generator.mousePressEvent(e)
@@ -184,10 +246,12 @@ class GraphWidget(galry.GalryWidget):
             return
         self.user_action_generator.mouseReleaseEvent(e)
         self.process_interaction()    
-        self._pause_ui =  False
+        self.parent_widget._pause_ui_sig.emit()
         
     def keyPressEvent(self, e):
         if e.key() == QtCore.Qt.Key_P: # pause, global, propagate to main widget.
+            e.ignore()
+        elif e.key() == QtCore.Qt.Key_T:
             e.ignore()
         pass
 #         self.user_action_generator.keyPressEvent(e)
@@ -209,7 +273,8 @@ class GraphWidget(galry.GalryWidget):
     @QtCore.pyqtSlot()
     def update_graph_data(self):
         if not self.pause and not self._pause_ui:
-            self.samples = self.parent_widget.new_samples[self.channel_mapping]
+            self.samples = self.parent_widget.disp_samples[self.channel_mapping,:]
+#             self.samples = self.parent_widget.samples[self.channel_mapping,:]
             self.p_samples = self.samples * self.interaction_manager.processors['navigation'].scalar + self.offsets
             num_samples = self.samples.shape[1]
             if num_samples != self.num_samples:
@@ -251,6 +316,8 @@ class GraphWidget(galry.GalryWidget):
             self.pause = True
             self.pause_label = 'Unpause'
         return
+    
+    @QtCore.pyqtSlot()
     def pause_update_ui(self): 
         if self._pause_ui:
             self._pause_ui = False
@@ -316,7 +383,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
         """Reset the navigation."""
         self.tx, self.ty, self.tz = 0., 0., 0.
         self.sx, self.sy = .01, .01
-        self.scalar = 2.31757045631e-05
+        self.scalar = 25
         self.sxl, self.syl = .01, .01
         self.rx, self.ry = 0., 0.
         self.navigation_rectangle = None
@@ -325,7 +392,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000) 
+a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 1000) 
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
@@ -341,7 +408,7 @@ mw.showMaximized()
 
 
 mw.show()
-a.timer.start(2000)
+a.timer.start(1000)
 
 if __name__ == '__main__':
     import sys

@@ -8,12 +8,14 @@ import time
 import numpy as np
 from array import array
 from PyQt4 import QtCore
+from math import pow
 
 
 class TestInterface(object):
     acquisition_rate = 20833
     def get_next_data(self, channels, max_read = 50000):
         return 0.01* np.random.randn(len(channels),self.acquisition_rate *2 )
+    
     
 
 class SGLInterface(QtCore.QObject):
@@ -34,6 +36,14 @@ class SGLInterface(QtCore.QObject):
         self.net_client = NetClient()
         self.query_acquire()
         self.acquisition_rate = 20833
+        
+        Vdd = 2.5
+        Vss = -2.5
+        ADC_bits = 16
+        gain = 200
+        scale = ((Vdd-Vss)/(pow(2,16)))/gain
+        self.adc_scale = np.float32(scale)
+        
         return
         
     
@@ -203,7 +213,7 @@ class SGLInterface(QtCore.QObject):
             self.buf = self.buf + self.net_client.recieve_ok(20971520, close, 20)
             print 'short'
         try:
-            self.data = np.array(array('h',self.buf[:-3]))
+            self.data = np.array(array('h',self.buf[:-3]),dtype = np.float32)
         except:
 #             print bufstr
 #             print 'length buff: '+ str(len(buf))
@@ -211,7 +221,7 @@ class SGLInterface(QtCore.QObject):
             return None
         self.data.shape = (int(dims[3]),int(dims[2]))
 #         arr.shape = (int(dims[3]),int(dims[2])) THIS WOULD RESHAPE TO BE FORTRANIC.
-        self.data = self.data.T
+        self.data = self.data.T * self.adc_scale
         return
     
     @QtCore.pyqtSlot(list, int) 
@@ -225,9 +235,11 @@ class SGLInterface(QtCore.QObject):
         if num_samples > max_read:
             num_samples = max_read
         if num_samples == 0:
+            self.data = np.array([],dtype = np.float32)
+            print 'no data'
             return None
         self.last_sample_read = current_sample
-        self.get_daq_data(current_sample, max_read, channels, False)
+        self.get_daq_data(current_sample, num_samples, channels, False)
         self.acquisition_complete.emit()
         return
     
