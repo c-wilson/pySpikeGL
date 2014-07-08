@@ -194,7 +194,7 @@ class SGLInterface(QtCore.QObject):
         line = 'GETDAQDATA '+ str(start_sample) + ' ' + str(num_samples) + ' ' + chan_str + ' 1'
 #         print line
         self.net_client.send_string(line)
-        self.bufstr = self.net_client.recieve_ok(20971520, close, 200, True)
+        self.bufstr = self.net_client.recieve_ok(1048576, close, 1000, True)
 #         print 'length buffer' +str(len(self.bufstr))
         handshake,_,self.buf = self.bufstr.partition('\n')
         dims = handshake.split(' ')
@@ -227,7 +227,7 @@ class SGLInterface(QtCore.QObject):
         if num_samples == 0:
             return None
         self.last_sample_read = current_sample
-        self.get_daq_data(current_sample, num_samples, channels, False)
+        self.get_daq_data(current_sample, max_read, channels, False)
         self.acquisition_complete.emit()
         return
     
@@ -251,13 +251,17 @@ class NetClient(object):
     
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # IPv4, TCP (UDP is socket.SOCK_DGRAM)
-        self.sock.connect((self.HOSTNAME,self.PORT))
         self.sock.settimeout(0.5)#wait only 0.5 second before timing out.
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.sock.connect((self.HOSTNAME,self.PORT))
+        print 
         return
     
     def close(self):
         if self.sock:
+            self.sock.shutdown(socket.SHUT_RDWR)
             self.sock.close()
+            print 'closing'
         self.sock = None
         return
     
@@ -299,7 +303,7 @@ class NetClient(object):
                 recieved = ''
             recieved = recieved + self.recieve_string(buffer_size)
             tries += 1
-            time.sleep(0.01)
+#         print tries
         if recieved.find('ERROR') != -1:
             print 'ERROR IN RECIEVING VALUE from recieve_ok method!'
             print recieved
@@ -321,11 +325,11 @@ class NetClient(object):
 if __name__ == '__main__':
     test = SGLInterface()
     a=test.get_next_data(range(63),20800)
-    a = a[1]
+
     time.sleep(0.1)
     for i in range (400):
         o = time.time()
-        u = test.get_next_data(range(63),10000)
+        u = test.get_next_data(range(63),20800)
         print time.time() - o
         if u:
             a = np.append(a, u[1], 0)

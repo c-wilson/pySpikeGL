@@ -108,7 +108,7 @@ class SpikeGraph(QtGui.QWidget):
     @QtCore.pyqtSlot()       
     def update(self):
         if not self.pause:
-            self.stime = time.time()
+#             self.stime = time.time()
             max_samples = self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000
             self.acquisition_trigger.emit(self.acquisition_channels, self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000)
             
@@ -127,11 +127,12 @@ class SpikeGraph(QtGui.QWidget):
 #         print 'done '+ str(time_take)
     @QtCore.pyqtSlot()       
     def update_graphs(self):
+#         print time.time() - self.stime
+
         self.new_samples = self.acquisition_interface.data
-        print time.time() - self.stime
         #TODO: we can probably make this more efficient in not copying this object.
         self.trigger.emit()
-        print time.time() - self.stime
+#         print time.time() - self.stime
         return
         
         
@@ -324,7 +325,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL') 
+a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000) 
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
@@ -340,10 +341,14 @@ mw.showMaximized()
 
 
 mw.show()
-a.timer.start(1000)
+a.timer.start(2000)
 
 if __name__ == '__main__':
     import sys
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+        print 'running'
         QtGui.QApplication.instance().exec_()
+        print 'done'
+        a.acquisition_interface.close_connect()
+    
         
