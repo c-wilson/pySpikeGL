@@ -1,3 +1,6 @@
+from PyQt4 import QtCore, QtGui
+import numpy as np
+
 class AbstractSystem(object):
     '''
     classdocs
@@ -25,15 +28,35 @@ class AbstractSystem(object):
         
         
     
-    def __init__(self, acquisition_interface = 'SpikeGL'):
-        self.window_params = self.build_window_params(acquisition_interface)
-        self.data = self.build_data()        
-        num_sites = self.calculate_sites()
-        self.data['num_sites'] = num_sites
+    def __init__(self):
+        
+        self.window_params = self.build_window_params()
+        
         return
     
 class Acute2System(AbstractSystem):
-    pass
+    
+    acquisition_system = 'SpikeGL'
+    
+    def build_window_params(self):
+        window1 = {'channels' :         np.array([192,193,224]),
+                   'channel_fn'  :      ['Sniff','Laser','FV'],
+                   'grid_position' :    (0,0,1,1),
+                   'site_numbers':      []
+                   }
+        
+        window_params = [window1]
+        return window_params
+    
+    def __init__(self):
+        print 'hello from acute2'
+        super(Acute2System, self).__init__()
+        
+        return
+    
+    
+    
+    
 
 
-systems = {'acute2' : Acute2System}
+systems = {'acute2' : Acute2System()}

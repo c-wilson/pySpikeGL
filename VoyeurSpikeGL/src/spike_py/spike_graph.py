@@ -34,22 +34,26 @@ class SpikeGraph(QtGui.QWidget):
     _head_idx = 0
     triggering = False
     triggered = False
-    buffer_len = 20833*5
+    buffer_len = 20833*10
     
-    def __init__(self, probe_type, system_type, refresh_period_ms = 1000, display_period = 1000, trigger_ch = 1, acquisition_source = 'SpikeGL', **kwargs):
+    def __init__(self, probe_type, system_config, refresh_period_ms = 1000, display_period = 1000, trigger_ch = 1, **kwargs):
         self.refresh_period_ms = refresh_period_ms
         self.display_period = display_period
         super(SpikeGraph, self).__init__()
         self.trigger_ch = trigger_ch
-        self.init_acquisition(acquisition_source)
+        
         probe = probes[probe_type]
-        system = systems[system_type]
-        self.acquisition_channels = self.combine_channels(probe, system)        
-        self.init_ui(probe,self.acquisition_channels)
-        self.init_timer()
+        system = systems[system_config]
+        self.init_acquisition(system.acquisition_system)
+        self.acquisition_channels = self.combine_channels(probe, system)  
+        
         self.samples = np.zeros((len(self.acquisition_channels),self.buffer_len),dtype = np.float32)
+        self.disp_samples = np.zeros((len(self.acquisition_channels), self.acquisition_interface.acquisition_rate*display_period/1000),dtype = np.float32)
+
+              
+        self.init_ui(probe,system,self.acquisition_channels)
+        self.init_timer()
         self._pause_ui_sig.connect(self.pause_update_ui)
-        print self.samples.shape
     
     def init_acquisition(self,acquisition_source):
         
@@ -74,10 +78,13 @@ class SpikeGraph(QtGui.QWidget):
         for idx, window in enumerate(probe.window_params):
             channels = window['channels'].tolist()
             acquisition_channels.extend(channels)
+        for idx, window in enumerate(system.window_params):
+            channels = window['channels'].tolist()
+            acquisition_channels.extend(channels)
         acquisition_channels.sort() 
         return acquisition_channels
     
-    def init_ui(self, probe, channel_mapping):
+    def init_ui(self, probe, system, channel_mapping):
         
         window = QtGui.QGridLayout()
         self.graph_widgets = [] #list of graph widget objects that we will fill below.
@@ -88,30 +95,39 @@ class SpikeGraph(QtGui.QWidget):
             position = widget.position
             window.addWidget(widget, position[0],position[1],position[2],position[3])
         
-        self.setLayout(window)      
+        print system.window_params
+        self.system_window = SystemWidget(system.window_params[0], self.acquisition_channels, self)
+        
+        
+        self.setLayout(window)
+        
     
     def keyPressEvent(self, event):
-        print 'press'
+#         print 'press'
         if type(event) == QtGui.QKeyEvent:
-            print event.key()
             if event.key() == QtCore.Qt.Key_P:
-                self.pause_update()
+                self.pause_acquire()
             if event.key() == QtCore.Qt.Key_T:
                 self.set_triggering_mode()
             event.accept()
+            
     def set_triggering_mode(self):
         if self.triggering:
             self.triggering = False
+            print 'Leaving trigger mode.'
         else:
             self.triggering = True
-            print 'Trigger mode set: waiting for trigger on ch: ' + str(self.trigger_ch)
+            print 'Trigger mode set: waiting for trigger on ch: ' + str(self.trigger_ch) + '.'
         return
         
-    def pause_update(self):
+    def pause_acquire(self):
         if self.pause:
             self.pause = False
+            print 'Unpausing.'
         else:
             self.pause = True
+            self.acquisition_interface.close_connect()
+            print 'Pausing.'
     
     @QtCore.pyqtSlot()
     def pause_update_ui(self):
@@ -129,13 +145,14 @@ class SpikeGraph(QtGui.QWidget):
         # to global update signal that will be emitted after the acquisition data is loaded
         for widget in self.graph_widgets:
             self.trigger.connect(widget.update_graph_data)
+        self.trigger.connect(self.system_window.update_graph_data)
 
         return
     
     @QtCore.pyqtSlot()       
     def update(self):
         if not self.pause:
-            self.acquisition_trigger.emit(self.acquisition_channels, self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000*1.5)
+            self.acquisition_trigger.emit(self.acquisition_channels, self.acquisition_interface.acquisition_rate * self.refresh_period_ms/1000*3)
 
 #         print 'done '+ str(time_take)
     @QtCore.pyqtSlot()       
@@ -146,6 +163,7 @@ class SpikeGraph(QtGui.QWidget):
 #         print start
         #roll the sample buffer, this implementation is far faster than rolling the buffer ~4ms, we can probably 
         #make this more efficient by using a ring index.
+        
         new_head_idx = (self._head_idx+self.new_samples.shape[1])%self.buffer_len
         if new_head_idx < self._head_idx:
             self.samples[:,(self._head_idx):] = self.new_samples[:,:-new_head_idx]
@@ -225,7 +243,7 @@ class GraphWidget(galry.GalryWidget):
         self.popMenu = QtGui.QMenu()
         anaction = self.popMenu.addAction(QtGui.QAction(self.pause_label, self,
                 statusTip="Cut the current selection's contents to the clipboard",
-                triggered=self.pause_update))
+                triggered=self.pause_acquire))
         self.popMenu.addAction(QtGui.QAction("Reset View", self,
                 statusTip="Cut the current selection's contents to the clipboard",
                 triggered=self.interaction_manager.processors['navigation'].process_reset_event))
@@ -308,7 +326,7 @@ class GraphWidget(galry.GalryWidget):
         return self.offsets
 
     @QtCore.pyqtSlot()
-    def pause_update(self):
+    def pause_acquire(self):
         if self.pause:
             self.pause = False
             self.pause_label = 'Pause'
@@ -323,6 +341,14 @@ class GraphWidget(galry.GalryWidget):
             self._pause_ui = False
         else:
             self._pause_ui = True
+    
+    
+class SystemWidget(GraphWidget): 
+    #to be impletmented
+    pass
+    
+    
+    
     
 class MyPaintManager(galry.PlotPaintManager):
     def initialize(self):
@@ -392,16 +418,18 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 1000) 
+a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 2000)
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
 mw.setCentralWidget(a)
-mw.setWindowTitle('SPIKES WITH PYTHON!')
+mw.setWindowTitle("SPIKESCOPE 3,000,001 by Spike-rosoft")
 dim = QtCore.QRect(1700,-650,1000,1800)
 mw.setGeometry(dim)
 # mw.showFullScreen()
 mw.showMaximized()
+a.system_window.setWindowTitle('SPIKESCOPE CONTROL')
+a.system_window.show()
 # p = a.palette()
 # p.setColor(a.backgroundRole(), QtCore.Qt.black)
 # a.setPalette(p)

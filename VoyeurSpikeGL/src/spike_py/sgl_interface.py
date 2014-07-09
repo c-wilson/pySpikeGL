@@ -231,9 +231,12 @@ class SGLInterface(QtCore.QObject):
         else:
             return False
         current_sample = self.get_scancount(close = False)
+        
         num_samples = current_sample - self.last_sample_read  #gives the number of samples since the last acquistion.
+
         if num_samples > max_read:
             num_samples = max_read
+            print 'reducing'
         if num_samples == 0:
             self.data = np.array([],dtype = np.float32)
             print 'no data'
@@ -273,7 +276,6 @@ class NetClient(object):
         if self.sock:
             self.sock.shutdown(socket.SHUT_RDWR)
             self.sock.close()
-            print 'closing'
         self.sock = None
         return
     
