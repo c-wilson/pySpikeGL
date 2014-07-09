@@ -16,8 +16,13 @@ import time
 class Main(QtGui.QMainWindow):
     def keyPressEvent(self, event):
         print 'press'
+#TODO: implement closing of all windows.        
+    def closeEvent(self,e):
+        print' close event'
+        qApp.quit()
 
 
+#TODO: implement unified zooming of widgets to be an option.
 
 
 class SpikeGraph(QtGui.QWidget):
@@ -35,6 +40,7 @@ class SpikeGraph(QtGui.QWidget):
     triggering = False
     triggered = False
     buffer_len = 20833*10
+    QUIT_TRIGGER = QtCore.pyqtSignal()
     
     def __init__(self, probe_type, system_config, refresh_period_ms = 1000, display_period = 1000, trigger_ch = 1, **kwargs):
         self.refresh_period_ms = refresh_period_ms
@@ -54,6 +60,10 @@ class SpikeGraph(QtGui.QWidget):
         self.init_ui(probe,system,self.acquisition_channels)
         self.init_timer()
         self._pause_ui_sig.connect(self.pause_update_ui)
+        
+    def closeEvent(self):
+        print' close event'
+        qApp.quit()
     
     def init_acquisition(self,acquisition_source):
         
@@ -423,13 +433,14 @@ palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
 mw.setCentralWidget(a)
-mw.setWindowTitle("SPIKESCOPE 3,000,001 by Spike-rosoft")
+mw.setWindowTitle("Spike-rosoft SPIKESCOPE Viewer")
 dim = QtCore.QRect(1700,-650,1000,1800)
 mw.setGeometry(dim)
 # mw.showFullScreen()
 mw.showMaximized()
-a.system_window.setWindowTitle('SPIKESCOPE CONTROL')
+a.system_window.setWindowTitle('Spike-rosoft SPIKESCOPE Control')
 a.system_window.show()
+
 # p = a.palette()
 # p.setColor(a.backgroundRole(), QtCore.Qt.black)
 # a.setPalette(p)
@@ -442,7 +453,8 @@ if __name__ == '__main__':
     import sys
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         print 'running'
-        QtGui.QApplication.instance().exec_()
+        
+        app = QtGui.QApplication.exec_()
         print 'done'
         a.acquisition_interface.close_connect()
     

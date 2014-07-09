@@ -226,6 +226,7 @@ class SGLInterface(QtCore.QObject):
     
     @QtCore.pyqtSlot(list, int) 
     def get_next_data(self, channels, max_read = 5000):
+#         times = time.time()
         if self.acquiring or self.query_acquire():
             self.acquiring = True
         else:
@@ -243,6 +244,7 @@ class SGLInterface(QtCore.QObject):
             return None
         self.last_sample_read = current_sample
         self.get_daq_data(current_sample, num_samples, channels, False)
+#         print time.time()-times
         self.acquisition_complete.emit()
         return
     
@@ -310,31 +312,36 @@ class NetClient(object):
         return recieved
     
     def recieve_ok(self, buffer_size = 2048, close = True, iterations = 10, return_all = False):
-        recieved = self.recieve_string(buffer_size)
+        self.recv_buffer=[]
+        recieved = ''
         tries = 0
         while recieved.find('OK\n') == -1 and recieved.find('ERROR') == -1 and tries < iterations:
-            if recieved is None:
-                recieved = ''
-            recieved = recieved + self.recieve_string(buffer_size)
+            recieved = self.recieve_string(buffer_size)            
+            if recieved:
+                self.recv_buffer.append(recieved)
             tries += 1
+        
 #         print tries
         if recieved.find('ERROR') != -1:
             print 'ERROR IN RECIEVING VALUE from recieve_ok method!'
             print recieved
             return None
-        if tries >= iterations:
+        elif tries >= iterations:
             print 'Conducted ' +str(iterations) +' without recieving OK'
+        else:
+            self.recv_str = ''.join(self.recv_buffer)
+#             print 'joining'
         if close:
             self.close() #close socket...
-        if return_all is True:
-            ret = recieved
-        else:
-            ret = recieved[:recieved.find('\nOK')]
         
-        if ret == '':
+        
+        if return_all is False:
+            self.recv_str = self.recv_str[:self.recv_str.find('\nOK')]
+        
+        if self.recv_str == '':
             return True
         else:
-            return ret 
+            return self.recv_str 
     
 if __name__ == '__main__':
     test = SGLInterface()
