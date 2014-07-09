@@ -49,7 +49,6 @@ class Acute2System(AbstractSystem):
         return window_params
     
     def __init__(self):
-        print 'hello from acute2'
         super(Acute2System, self).__init__()
         
         return

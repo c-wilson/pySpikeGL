@@ -12,9 +12,9 @@ from math import pow
 
 
 class TestInterface(object):
-    acquisition_rate = 20833
+    fs = 20833
     def get_next_data(self, channels, max_read = 50000):
-        return 0.01* np.random.randn(len(channels),self.acquisition_rate *2 )
+        return 0.01* np.random.randn(len(channels),self.fs *2 )
     
     
 
@@ -35,14 +35,14 @@ class SGLInterface(QtCore.QObject):
         super(SGLInterface,self).__init__()
         self.net_client = NetClient()
         self.query_acquire()
-        self.acquisition_rate = 20833
+        self.fs = 20833
         
         Vdd = 2.5
         Vss = -2.5
         ADC_bits = 16
         gain = 200
         scale = ((Vdd-Vss)/(pow(2,16)))/gain
-        self.adc_scale = np.float32(scale)
+        self.adc_scale = np.float64(scale)
         
         return
         
@@ -213,7 +213,7 @@ class SGLInterface(QtCore.QObject):
             self.buf = self.buf + self.net_client.recieve_ok(20971520, close, 20)
             print 'short'
         try:
-            self.data = np.array(array('h',self.buf[:-3]),dtype = np.float32)
+            self.data = np.array(array('h',self.buf[:-3]),dtype = np.float64)
         except:
 #             print bufstr
 #             print 'length buff: '+ str(len(buf))
@@ -239,7 +239,7 @@ class SGLInterface(QtCore.QObject):
             num_samples = max_read
             print 'reducing'
         if num_samples == 0:
-            self.data = np.array([],dtype = np.float32)
+            self.data = np.array([],dtype = np.float64)
             print 'no data'
             return None
         self.last_sample_read = current_sample
