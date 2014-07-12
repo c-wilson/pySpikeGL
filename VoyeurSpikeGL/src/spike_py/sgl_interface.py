@@ -25,7 +25,8 @@ class SGLInterface(QtCore.QObject):
     last_sample_read = 0
     acquiring = False
     acquisition_complete = QtCore.pyqtSignal()
-    
+    params = None
+    adc_scale = None
 
 
     def __init__(self,**kwargs):
@@ -36,13 +37,7 @@ class SGLInterface(QtCore.QObject):
         self.net_client = NetClient()
         self.query_acquire()
         self.fs = 20833
-        
-        Vdd = 2.5
-        Vss = -2.5
-        ADC_bits = 16
-        gain = 200
-        scale = ((Vdd-Vss)/(pow(2,16)))/gain
-        self.adc_scale = np.float64(scale)
+
         
         return
         
@@ -50,6 +45,23 @@ class SGLInterface(QtCore.QObject):
     def close_connect(self):
         self.net_client.close()
         return
+    
+    def set_adc_scale(self):
+        if not self.params:
+            self.get_params()
+        
+        Vdd = self.params['aoRangeMax']
+        Vss = self.params['aoRangeMin']
+        ADC_bits = 16
+        gain = self.params['auxGain']
+#         
+#         Vdd = 2
+#         Vss = -2
+#         ADC_bits = 16.
+#         gain = 200.
+        scale = ((Vdd-Vss)/(pow(2.,16.)))/gain
+        self.adc_scale = np.float64(scale)
+    
     
     def get_ver(self):
         #returns version number.
@@ -90,11 +102,15 @@ class SGLInterface(QtCore.QObject):
             line = str(key) + ' = ' + str(val)
             self.net_client.send_string(line)
         self.net_client.send_string('') #send blank line at the end as per protocol...
-        self.net_client.recieve_ok()
+        ok = self.net_client.recieve_ok()
+        if ok:
+            self.params = params
         return True
     
     def set_save_file(self, filename): # FILENAME should be in 'C:/folder/whatever.bin' format.
         if type(filename) is not str:
+            print type(filename)
+            print filename
             print 'SPIKEGL FILENAME MUST BE A VALID STRING.'
         sendstring = 'SETSAVEFILE ' + filename
         self.net_client.send_string(sendstring)
@@ -191,7 +207,8 @@ class SGLInterface(QtCore.QObject):
     
     def get_daq_data(self, end_sample, num_samples, channels, close = True, ):
         # returns a m by n matrix of m channels with n samples.
-        
+        if not self.adc_scale:
+            self.set_adc_scale()
         
         if not self.acquiring and not self.query_acquire():
             return False

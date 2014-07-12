@@ -42,13 +42,14 @@ class SpikeGraph(QtGui.QWidget):
     _head_idx = 0
     triggering = False
     triggered = False
-    buffer_len = 20833*10
+    trigger_offset_ms = 300 #time before the trigger that you want to display
+    buffer_len = 20833*5
     
     filtering = True
     
     def __init__(self, probe_type, system_config, 
                  refresh_period_ms = 1000, display_period = 1000, 
-                 trigger_ch = 1, **kwargs):
+                 trigger_ch = 66, **kwargs):
         
         self.refresh_period_ms = refresh_period_ms
         self.display_period = display_period
@@ -81,7 +82,9 @@ class SpikeGraph(QtGui.QWidget):
             self.source = TestInterface()
         if acquisition_source == 'SpikeGL':
             self.source = SGLInterface()
-            
+        
+        #TODO: Get acquisition params from spikeGL to inform ADC gain value
+        
         self.source.moveToThread(self.acquisition_thread)
         self.acquisition_thread.start()
         self.acquisition_trigger.connect(self.source.get_next_data)
@@ -101,6 +104,7 @@ class SpikeGraph(QtGui.QWidget):
             channels = window['channels'].tolist()
             acquisition_channels.extend(channels)
         acquisition_channels.sort() 
+        
         return acquisition_channels
     
     def init_ui(self, probe, system, channel_mapping):
@@ -177,6 +181,7 @@ class SpikeGraph(QtGui.QWidget):
     def update_graphs(self):
         self.stime = time.time()
         self.new_samples =  self.source.data
+#         print self.new_samples[:,64]
         self.filter_signal()
         
 
@@ -196,7 +201,7 @@ class SpikeGraph(QtGui.QWidget):
         
         self._head_idx = new_head_idx
         
-        
+#         print self.samples[66,:]
         
         if self.pause_ui: #we don't need to mess with anything else here, so lets get out.
             return
@@ -213,10 +218,11 @@ class SpikeGraph(QtGui.QWidget):
             self.find_trigger()
             
         if self.triggering and self.triggered:
-            if (self._head_idx - self.last_trigger_idx)%self.buffer_len > self.disp_samples:
+            
+            if (self._head_idx - self.last_trigger_idx)%self.buffer_len > (self.source.fs * self.display_period/1000):
                 self.triggered = False
                 # update display
-                disp_start_idx = self.last_trigger_idx
+                disp_start_idx = (self.last_trigger_idx )%self.buffer_len
                 if disp_start_idx > self._head_idx:
                     self.disp_samples[:,:-self._head_idx] = self.samples[:,disp_start_idx:]
                     self.disp_samples[:,-self._head_idx:] = self.samples[:,:self._head_idx]
@@ -252,13 +258,22 @@ class SpikeGraph(QtGui.QWidget):
     
         
     def find_trigger(self):
-        self.th = self.samples[self.trigger_ch,:] > np.float64(3.3) #TTL threshold rounded down.
+        self.th = self.samples[self.trigger_ch,:] > np.float64(.04) #TTL threshold rounded down.
         if np.any(self.th):
-            th_edges = np.convolve([1, -1], self.th, mode='same')
-            th_idx = np.where(th_edges == 1)[-1] #THIS IS FOR UPWARD EDGES!
-            if self.last_trigger_idx != th_idx: #very very rare that two triggers will happen in the same idx position.
+            th_edges = np.convolve([1,-1], self.th, mode='same')
+#             th_edges = np.diff(self.th)
+            th_idx = np.where(th_edges == 1) #THIS IS FOR UPWARD EDGES!
+#             print th_idx
+            th_idx = th_idx[0][-1]
+#             print th_idx  
+#             print self._head_idx
+#             print type(th_idx)                        
+            if self.last_trigger_idx != th_idx and th_idx != 0 and th_idx != self._head_idx: #very very rare that two triggers will happen in the same idx position.
+                # dont want the trigger to be 0 or to be == to the head_idx.
                 self.triggered = True
-                self.last_trigger_idx
+                self.last_trigger_idx = th_idx
+            else:
+                print 'trigger reject'
         
                 
         
@@ -286,6 +301,8 @@ class GraphWidget(galry.GalryWidget):
         for chan in self.channels:
             chan_map = channel_mapping.index(chan)
             channel_map_array = np.append(channel_map_array,chan_map)
+        
+        print channel_map_array
         return channel_map_array
         
     def mouseDoubleClickEvent(self,event):
@@ -472,7 +489,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 1000)
+a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 2000)
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
