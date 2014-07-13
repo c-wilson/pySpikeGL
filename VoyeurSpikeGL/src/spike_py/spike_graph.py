@@ -16,13 +16,15 @@ import time
 class Main(QtGui.QMainWindow):
     def keyPressEvent(self, event):
         print 'press'
-#TODO: implement closing of all windows.        
     def closeEvent(self,e):
         print' close event'
         qApp.quit()
 
 
 #TODO: implement unified zooming of widgets to be an option.
+#TODO: implement quitting mechanism that will destroy all windows and quit the QApplication.
+#TODO: implement mutex for acquisition system - graphing system shared variables or move them into signals
+#TODO: move acquisition into multiprocessing process?
 
 
 class SpikeGraph(QtGui.QWidget):
@@ -55,16 +57,12 @@ class SpikeGraph(QtGui.QWidget):
         self.display_period = display_period
         super(SpikeGraph, self).__init__()
         self.trigger_ch = trigger_ch
-        
         probe = probes[probe_type]
         system = systems[system_config]
         self.init_acquisition(system.acquisition_system)
         self.all_channels = self.build_channel_list(probe, system)  
-        
-        self.samples = np.zeros((len(self.all_channels),self.buffer_len),dtype = np.float64)
-        self.disp_samples = np.zeros((len(self.all_channels), self.source.fs*display_period/1000),dtype = np.float64)
-
-              
+        self.buffer = CircularBuffer(len(self.all_channels), self.buffer_len) 
+        self.disp_samples = np.zeros((len(self.all_channels), self.source.fs*display_period/1000),dtype = np.float64) 
         self.init_ui(probe,system,self.all_channels)
         self.init_timer()
         self._pause_ui_sig.connect(self.pause_update_ui)
@@ -180,85 +178,54 @@ class SpikeGraph(QtGui.QWidget):
     @QtCore.pyqtSlot()       
     def update_graphs(self):
         self.stime = time.time()
-        self.new_samples =  self.source.data
+        self.buffer.add_samples(self.source.data)
 #         print self.new_samples[:,64]
-        self.filter_signal()
+#         self.filter_signal()
         
 
-            
-        
-#         start = self.samples.shape[1]-self.new_samples.shape[1]
-#         print start
-        #roll the sample buffer, this implementation is far faster than rolling the buffer ~4ms, we can probably 
-        #make this more efficient by using a ring index.
-        
-        new_head_idx = (self._head_idx+self.new_samples.shape[1])%self.buffer_len
-        if new_head_idx < self._head_idx:
-            self.samples[:,(self._head_idx):] = self.new_samples[:,:-new_head_idx]
-            self.samples[:,:new_head_idx] = self.new_samples[:,-(new_head_idx):]
-        else:        
-            self.samples[:,self._head_idx:new_head_idx] = self.new_samples[:,:]       
-        
-        self._head_idx = new_head_idx
-        
-#         print self.samples[66,:]
-        
         if self.pause_ui: #we don't need to mess with anything else here, so lets get out.
             return
         
+        disp_period_sample_num = self.source.fs * self.display_period/1000
+        
+        
         if not self.triggering:
-            disp_start_idx = (self._head_idx - (self.source.fs * self.display_period/1000))%self.buffer_len
-            if disp_start_idx > self._head_idx:
-                self.disp_samples[:,:-self._head_idx] = self.samples[:,disp_start_idx:]
-                self.disp_samples[:,-self._head_idx:] = self.samples[:,:self._head_idx]
-            else:
-                self.disp_samples = self.samples[:,disp_start_idx:self._head_idx]
-            self.graph_trigger.emit()
+            self.disp_samples = self.buffer.sample_range(disp_period_sample_num)
         elif self.triggering and not self.triggered:
-            self.find_trigger()
-            
+            self.find_trigger()            
         if self.triggering and self.triggered:
-            
-            if (self._head_idx - self.last_trigger_idx)%self.buffer_len > (self.source.fs * self.display_period/1000):
-                self.triggered = False
-                # update display
-                disp_start_idx = (self.last_trigger_idx )%self.buffer_len
-                if disp_start_idx > self._head_idx:
-                    self.disp_samples[:,:-self._head_idx] = self.samples[:,disp_start_idx:]
-                    self.disp_samples[:,-self._head_idx:] = self.samples[:,:self._head_idx]
-                else:
-                    self.disp_samples = self.samples[:,disp_start_idx:self._head_idx]
-            self.graph_trigger.emit()        
+            trigger_offset_samples = self.source.fs * self.trigger_offset_ms/1000
+            disp_tail_idx = (self.last_trigger_idx - trigger_offset_samples)%self.buffer.buffer_len # index of first sample to display.
+            self.disp_samples = self.buffer.sample_range(disp_period_sample_num, tail = disp_tail_idx) # returns false if the number of samples is not there.
+        if self.disp_samples:
+            self.triggered = False # we've acted on the trigger, so we will start looking for new triggers next time.
+            if self.filtering:
+                self.disp_samples = self.filter_signal(self.disp_samples) # bandpass filter.
+            self.graph_trigger.emit()
+
         return
     
-    def build_filter(self,lp = 5000., hp = 300.):        
+    
+    def build_filter(self,lp = 5000., hp = 300.):     
         hp_rad = float(hp) / (float(self.source.fs)/2)
         lp_rad = float(lp) / (float(self.source.fs)/2)
-        
         hp_rad = np.float64(hp_rad)
         lp_rad = np.float64(lp_rad)
         self.signal_filter = signal.butter(4,[hp_rad, lp_rad], 'bandpass', output = 'ba')
         return 
     
     
-    def filter_signal(self):
-        if not self.filtering:
-            return
+    def filter_signal(self, sig):
+        if self.filtering:
 #         tm = time.time()
 #         print self.e_phys_channel_number
-        self.new_samples[:self.e_phys_channel_number,:] = signal.filtfilt(self.signal_filter[0],
-                                               self.signal_filter[1],
-                                               self.new_samples[:self.e_phys_channel_number,:])
-        #TODO: make this better.
-#         print self.new_samples.dtype
-#         print time.time()-tm
-        return
-
-        
+            sig[:self.e_phys_channel_number,:] = signal.filtfilt(self.signal_filter[0],
+                                                                 self.signal_filter[1],
+                                                                 sig[:self.e_phys_channel_number,:])
+        return sig
     
-        
     def find_trigger(self):
-        self.th = self.samples[self.trigger_ch,:] > np.float64(.04) #TTL threshold rounded down.
+        self.th = self.buffer.samples[self.trigger_ch,:] > np.float64(.04) #TTL threshold rounded down.
         if np.any(self.th):
             th_edges = np.convolve([1,-1], self.th, mode='same')
 #             th_edges = np.diff(self.th)
@@ -358,6 +325,7 @@ class GraphWidget(galry.GalryWidget):
     @QtCore.pyqtSlot()
     def update_graph_data(self):
         if not self.pause and not self._pause_ui:
+            #TODO: make the widgets use a view of the parent.display_samples array.
             self.samples = self.parent_widget.disp_samples[self.channel_mapping,:]
 #             self.samples = self.parent_widget.samples[self.channel_mapping,:]
             self.p_samples = self.samples * self.interaction_manager.processors['navigation'].scalar + self.offsets
@@ -410,6 +378,42 @@ class GraphWidget(galry.GalryWidget):
             self._pause_ui = True
 
 
+class CircularBuffer(object):
+    def __init__(self, rows, columns, dimension = 1):
+        self.shape = (rows,columns)
+        self.head_idx = 0
+        self.buffer_length = self.columns # we are using row-major order here (python default and C)
+        self.samples = np.zeros(self.shape,dtype = np.float64)
+        return
+    
+    def add_samples(self,new_samples):
+        new_head_idx = (self.head_idx+new_samples.shape[1])%self.buffer_len
+        if new_head_idx < self.head_idx:
+            self.samples[:,(self.head_idx):] = new_samples[:,:-new_head_idx]
+            self.samples[:,:new_head_idx] = new_samples[:,-(new_head_idx):]
+        else:        
+            self.samples[:,self.head_idx:new_head_idx] = self.new_samples[:,:]       
+        self.head_idx = new_head_idx
+        return
+        
+    def sample_range(self, num_samples = None, head = None, tail = None, ):
+        if num_samples and not head and not tail: #returns the last n samples before the head.
+            tail = (self.head_idx - num_samples)%self.buffer_len # index of first sample to display.
+            head = self.head_idx
+        elif num_samples and tail and not head: #returns the next n samples after the specified tail. Returns None if not enough samples exist!
+            head = (tail + num_samples)%self.buffer_len # index of last value to display
+            if not ((self.head_idx > tail and self.head_idx > tail + num_samples) or # in this case, we have not wrapped around the main buffer, so the head should be absolutely greater.
+                    (self.head_idx < tail and self.head_idx > head)):
+                return None
+        samples = np.zeros((self.shape[0],num_samples), dtype = np.float64)
+        if tail > head:
+            samples[:,:-head] = self.samples[:,tail:]
+            samples[:,-head:] = self.samples[:,:head]
+        else:
+            samples = self.samples[:,tail:head]
+            
+        return samples
+         
 
 
    
