@@ -197,7 +197,7 @@ class SpikeGraph(QtGui.QWidget):
             trigger_offset_samples = self.source.fs * self.trigger_offset_ms/1000
             disp_tail_idx = (self.last_trigger_idx - trigger_offset_samples)%self.buffer.buffer_len # index of first sample to display.
             self.disp_samples = self.buffer.sample_range(disp_period_sample_num, tail = disp_tail_idx) # returns false if the number of samples is not there.
-        if self.disp_samples:
+        if self.disp_samples is not None:
             self.triggered = False # we've acted on the trigger, so we will start looking for new triggers next time.
             if self.filtering:
                 self.disp_samples = self.filter_signal(self.disp_samples) # bandpass filter.
@@ -382,7 +382,7 @@ class CircularBuffer(object):
     def __init__(self, rows, columns, dimension = 1):
         self.shape = (rows,columns)
         self.head_idx = 0
-        self.buffer_length = self.columns # we are using row-major order here (python default and C)
+        self.buffer_len =columns # we are using row-major order here (python default and C)
         self.samples = np.zeros(self.shape,dtype = np.float64)
         return
     
@@ -392,7 +392,7 @@ class CircularBuffer(object):
             self.samples[:,(self.head_idx):] = new_samples[:,:-new_head_idx]
             self.samples[:,:new_head_idx] = new_samples[:,-(new_head_idx):]
         else:        
-            self.samples[:,self.head_idx:new_head_idx] = self.new_samples[:,:]       
+            self.samples[:,self.head_idx:new_head_idx] = new_samples[:,:]       
         self.head_idx = new_head_idx
         return
         
@@ -493,7 +493,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 2000)
+a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 3000)
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
