@@ -381,6 +381,10 @@ class GraphWidget(galry.GalryWidget):
 
 
 class CircularBuffer(object):
+    '''
+    This is a circular buffer object for use with streaming data input. It has methods to add samples to the 
+    
+    '''
     def __init__(self, rows, columns, dimension = 1):
         self.shape = (rows,columns)
         self.head_idx = 0
@@ -389,18 +393,30 @@ class CircularBuffer(object):
         return
     
     def add_samples(self,new_samples):
-        new_head_idx = (self.head_idx+new_samples.shape[1])%(self.buffer_len)
-        if new_head_idx < self.head_idx and new_head_idx == 0:
-            self.samples[:,self.head_idx:] = new_samples[:,:]
-        elif new_head_idx < self.head_idx:
-            self.samples[:,(self.head_idx):] = new_samples[:,:-new_head_idx]
-            self.samples[:,:new_head_idx] = new_samples[:,-(new_head_idx):]            
-        else:        
-            self.samples[:,self.head_idx:new_head_idx] = new_samples[:,:]                   
-        self.head_idx = new_head_idx
+        if new_samples.ndim < 2:
+            print 'ERROR: the input is expected as a 2D numpy.array().'
+        num_new_samples = new_samples.shape[1]
+        #TODO: add functionality for single dimension arrays...
+        if num_new_samples >=self.buffer_len:
+            print 'Number samples greater than buffer length, clipping new samples to fit buffer!'
+            self.samples[:,:] = new_samples[:,-self.buffer_len:] # fill the buffer with the newest samples.
+            self.head_idx = 0 #start at beginning for next new_samples.
+        else:
+            new_head_idx = (self.head_idx+num_new_samples)%(self.buffer_len)
+            if new_head_idx < self.head_idx and new_head_idx == 0:
+                self.samples[:,self.head_idx:] = new_samples[:,:]
+            elif new_head_idx < self.head_idx:
+                self.samples[:,(self.head_idx):] = new_samples[:,:-new_head_idx]
+                self.samples[:,:new_head_idx] = new_samples[:,-(new_head_idx):]            
+            else:        
+                self.samples[:,self.head_idx:new_head_idx] = new_samples[:,:]                   
+            self.head_idx = new_head_idx
         return
         
     def sample_range(self, num_samples = None, head = None, tail = None, ):
+        if num_samples >= self.buffer_len:
+            num_samples = self.buffer_len-1
+            print 'More samples requested than present in buffer, returning all available samples.'
         if num_samples and not head and not tail: #returns the last n samples before the head.
             tail = (self.head_idx - num_samples)%self.buffer_len # index of first sample to display.
             head = self.head_idx
