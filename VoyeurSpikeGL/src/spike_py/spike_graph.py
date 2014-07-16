@@ -11,6 +11,7 @@ from system_definitions import systems
 from sgl_interface import SGLInterface, TestInterface
 from PyQt4 import QtCore, QtGui
 import time
+from copy import deepcopy
 
 
 class Main(QtGui.QMainWindow):
@@ -45,7 +46,7 @@ class SpikeGraph(QtGui.QWidget):
     triggering = False
     triggered = False
     trigger_offset_ms = 300 #time before the trigger that you want to display
-    buffer_len = 20833*5
+    buffer_len = 20833*20
     
     filtering = True
     
@@ -179,6 +180,7 @@ class SpikeGraph(QtGui.QWidget):
     def update_graphs(self):
         self.stime = time.time()
         self.buffer.add_samples(self.source.data)
+#         self.buffer.add_samples(np.random.rand(67,20000))
 #         print self.new_samples[:,64]
 #         self.filter_signal()
         
@@ -387,12 +389,14 @@ class CircularBuffer(object):
         return
     
     def add_samples(self,new_samples):
-        new_head_idx = (self.head_idx+new_samples.shape[1])%self.buffer_len
-        if new_head_idx < self.head_idx:
+        new_head_idx = (self.head_idx+new_samples.shape[1])%(self.buffer_len)
+        if new_head_idx < self.head_idx and new_head_idx == 0:
+            self.samples[:,self.head_idx:] = new_samples[:,:]
+        elif new_head_idx < self.head_idx:
             self.samples[:,(self.head_idx):] = new_samples[:,:-new_head_idx]
-            self.samples[:,:new_head_idx] = new_samples[:,-(new_head_idx):]
+            self.samples[:,:new_head_idx] = new_samples[:,-(new_head_idx):]            
         else:        
-            self.samples[:,self.head_idx:new_head_idx] = new_samples[:,:]       
+            self.samples[:,self.head_idx:new_head_idx] = new_samples[:,:]                   
         self.head_idx = new_head_idx
         return
         
@@ -406,13 +410,15 @@ class CircularBuffer(object):
                     (self.head_idx < tail and self.head_idx > head)):
                 return None
         samples = np.zeros((self.shape[0],num_samples), dtype = np.float64)
-        if tail > head:
+        if head == 0:
+            samples = self.samples[:,tail:]
+        elif tail > head:
             samples[:,:-head] = self.samples[:,tail:]
             samples[:,-head:] = self.samples[:,:head]
+            
         else:
             samples = self.samples[:,tail:head]
-            
-        return samples
+        return deepcopy(samples)
          
 
 
@@ -493,7 +499,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 3000)
+a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 2000)
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
