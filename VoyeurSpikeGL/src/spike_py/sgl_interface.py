@@ -37,8 +37,6 @@ class SGLInterface(QtCore.QObject):
         self.net_client = NetClient()
         self.query_acquire()
         self.fs = 20833
-
-        
         return
         
     
@@ -99,8 +97,9 @@ class SGLInterface(QtCore.QObject):
             print 'SPIKEGL did not return READY for params.'
             return False
         for key, val in params.iteritems():
-            line = str(key) + ' = ' + str(val)
-            self.net_client.send_string(line)
+            if val:
+                line = str(key) + ' = ' + str(val)
+                self.net_client.send_string(line)
         self.net_client.send_string('') #send blank line at the end as per protocol...
         ok = self.net_client.recieve_ok()
         if ok:
@@ -114,8 +113,13 @@ class SGLInterface(QtCore.QObject):
             print 'SPIKEGL FILENAME MUST BE A VALID STRING.'
         sendstring = 'SETSAVEFILE ' + filename
         self.net_client.send_string(sendstring)
-        self.net_client.recieve_ok()
-        return
+        ok = self.net_client.recieve_ok()
+        if ok == 'OK':
+            print 'SpikeGL save filename set.'
+            return True
+        else:
+            print 'SpikeGL save filename NOT SET'
+            return False
     
     def query_acquire(self):
         self.net_client.send_string('ISACQ')
@@ -134,20 +138,28 @@ class SGLInterface(QtCore.QObject):
             return False
         if self.query_acquire():
             return True
-        self.set_params(params)
-        self.net_client.send_string('STARTACQ')
+        done =self.set_params(params)
+        if not done:
+            return False
+        self.net_client.send_string('STARTACQ\n')
+        time.sleep(.1)
         done = self.net_client.recieve_ok()
-        if done:
+        if done == 'OK':
             self.acquiring = True
-        return done
+            print 'SpikeGL acquisition started.'
+            return True
+        else:
+            return False
     
     def stop_acquire(self):
-        self.net_client.send_string('STOPACQ')
+        self.net_client.send_string('STOPACQ\n')
         done = self.net_client.recieve_ok()
-        if done:
+        if done == 'OK':
             self.saving = False
             self.acquiring = False
-        return done
+            return True
+        else:
+            return False
     
     def query_save(self):
         self.net_client.send_string('ISSAVING')
@@ -158,20 +170,26 @@ class SGLInterface(QtCore.QObject):
             self.saving = False
         return self.saving
     
-    def stop_save(self, filename = None):
+    def start_save(self, filename = None):
         if self.query_save():
             return True
         if not self.query_acquire():
             return False
         if filename:
-            self.set_save_file(filename)
+            name_set = self.set_save_file(filename)
+        if not name_set:
+            return False
         self.net_client.send_string('SETSAVING 1')
         done = self.net_client.recieve_ok()
-        if done:
+        if done == 'OK':
             self.saving = True
-        return done
+            print 'SpikeGL save started.'
+            return True
+        else:
+            print 'ERROR: SpikeGL'
+            return False
         
-    def save_stop(self):
+    def stop_save(self):
         self.net_client.send_string('SETSAVING 0')
         done = self.net_client.recieve_ok()
         if done:
@@ -274,6 +292,7 @@ class NetClient(object):
     classdocs
     '''    
     stream_matrix = []
+    recv_str = ''
     
     def __init__(self,hostname = 'localhost', port = 4142):
         self.HOSTNAME = hostname
@@ -288,9 +307,9 @@ class NetClient(object):
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # IPv4, TCP (UDP is socket.SOCK_DGRAM)
         self.sock.connect((self.HOSTNAME,self.PORT))
-        self.sock.settimeout(0.2)#wait only 0.2 second before timing out.
+        self.sock.settimeout(1)#wait only 0.2 second before timing out.
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-#         print 
+#         print 'connect'
         return
     
     def close(self):
@@ -326,7 +345,7 @@ class NetClient(object):
         recieved = ''
         try:
             recieved = self.sock.recv(buffer_size)
-        except socket.error as msg:
+        except (socket.error, AttributeError) as msg:
             self._reconnect()
         return recieved
     
@@ -364,22 +383,20 @@ class NetClient(object):
     
 if __name__ == '__main__':
     test = SGLInterface()
-    a=test.get_next_data(range(63),20800)
-
-    time.sleep(0.1)
-    for i in range (400):
-        o = time.time()
-        u = test.get_next_data(range(63),500000)
-        print time.time() - o
-        if u:
-            a = np.append(a, u[1], 0)
-        
-        time.sleep(1)
-        
-        print str(i)
-    plt.plot(a)
-    plt.show()
-        
+    time.sleep(1)
+    params = test.get_params()
+    time.sleep(1)
+    print 'starting acq'
+    test.start_acquire(params)
+    test.start_save('D:\\test.bin')
+    time.sleep(3)    
+    
+    
+    print 'stopping acq'
+    test.stop_acquire()
+    
+    test.close_connect()
+    
     pass
         
         
