@@ -230,12 +230,14 @@ class SGLInterface(QtCore.QObject):
             self.buf = self.buf + self.net_client.recieve_ok(20971520, close, 20)
             print 'short'
         try:
-            self.data = np.array(array('h',self.buf[:-3]),dtype = np.float64)
+            self.data = np.fromstring(self.buf, dtype=np.int16, count = int(dims[3]) * int(dims[2]))
+            self.data = self.data.astype(np.float64,copy = False)
         except:
 #             print bufstr
-#             print 'length buff: '+ str(len(buf))
-#             print 'handshake: ' + handshake + _ + buf
+            print 'length buff: '+ str(len(self.buf))
+            print 'handshake: ' + handshake 
             return None
+        
         self.data.shape = (int(dims[3]),int(dims[2]))
 #         arr.shape = (int(dims[3]),int(dims[2])) THIS WOULD RESHAPE TO BE FORTRANIC.
         self.data = self.data.T * self.adc_scale
@@ -285,10 +287,10 @@ class NetClient(object):
     
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # IPv4, TCP (UDP is socket.SOCK_DGRAM)
-        self.sock.settimeout(0.5)#wait only 0.5 second before timing out.
-        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sock.connect((self.HOSTNAME,self.PORT))
-        print 
+        self.sock.settimeout(0.2)#wait only 0.2 second before timing out.
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+#         print 
         return
     
     def close(self):
@@ -367,12 +369,12 @@ if __name__ == '__main__':
     time.sleep(0.1)
     for i in range (400):
         o = time.time()
-        u = test.get_next_data(range(63),20800)
+        u = test.get_next_data(range(63),500000)
         print time.time() - o
         if u:
             a = np.append(a, u[1], 0)
         
-        time.sleep(0.1)
+        time.sleep(1)
         
         print str(i)
     plt.plot(a)

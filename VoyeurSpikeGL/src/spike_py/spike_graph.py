@@ -34,6 +34,7 @@ class SpikeGraph(QtGui.QWidget):
     '''
     pause = False # pauses graphing updates AND acquisition.
     pause_ui = False #only pauses the ui, not the acquisition.
+    updating = False
     
     graph_trigger = QtCore.pyqtSignal()
     acquisition_trigger = QtCore.pyqtSignal(list, int)
@@ -46,7 +47,7 @@ class SpikeGraph(QtGui.QWidget):
     triggering = False
     triggered = False
     trigger_offset_ms = 300 #time before the trigger that you want to display
-    buffer_len = 20833*20
+    buffer_len = 20833*10
     
     filtering = True
     
@@ -172,22 +173,25 @@ class SpikeGraph(QtGui.QWidget):
     
     @QtCore.pyqtSlot()       
     def update(self):
+        self.stime = time.time()
+        
         if not self.pause:
             self.acquisition_trigger.emit(self.all_channels, self.source.fs * self.refresh_period_ms/1000*3)
 
 #         print 'done '+ str(time_take)
     @QtCore.pyqtSlot()       
     def update_graphs(self):
-        self.stime = time.time()
+#         self.stime = time.time()
         self.buffer.add_samples(self.source.data)
 #         self.buffer.add_samples(np.random.rand(67,20000))
+#         print time.time() - self.stime
 #         print self.new_samples[:,64]
 #         self.filter_signal()
         
 
-        if self.pause_ui: #we don't need to mess with anything else here, so lets get out.
+        if self.pause_ui or self.updating: #we don't need to mess with anything else here, so lets get out.
             return
-        
+        self.updating = True
         disp_period_sample_num = self.source.fs * self.display_period/1000
         
         
@@ -203,8 +207,10 @@ class SpikeGraph(QtGui.QWidget):
             self.triggered = False # we've acted on the trigger, so we will start looking for new triggers next time.
             if self.filtering:
                 self.disp_samples = self.filter_signal(self.disp_samples) # bandpass filter.
+#             print 'final' + str(time.time() - self.stime)
             self.graph_trigger.emit()
-
+#         print time.time() - self.stime
+        self.updating = False
         return
     
     
@@ -213,17 +219,18 @@ class SpikeGraph(QtGui.QWidget):
         lp_rad = float(lp) / (float(self.source.fs)/2)
         hp_rad = np.float64(hp_rad)
         lp_rad = np.float64(lp_rad)
-        self.signal_filter = signal.butter(4,[hp_rad, lp_rad], 'bandpass', output = 'ba')
+        self.signal_filter = signal.butter(2,[hp_rad, lp_rad], 'bandpass', output = 'ba')
         return 
     
     
     def filter_signal(self, sig):
         if self.filtering:
-#         tm = time.time()
+#             tm = time.time()
 #         print self.e_phys_channel_number
             sig[:self.e_phys_channel_number,:] = signal.filtfilt(self.signal_filter[0],
                                                                  self.signal_filter[1],
                                                                  sig[:self.e_phys_channel_number,:])
+#         print time.time() - tm
         return sig
     
     def find_trigger(self):
@@ -446,7 +453,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
         """Reset the navigation."""
         self.tx, self.ty, self.tz = 0., 0., 0.
         self.sx, self.sy = .01, .01
-        self.scalar = 25
+        self.scalar = .001
         self.sxl, self.syl = .01, .01
         self.rx, self.ry = 0., 0.
         self.navigation_rectangle = None
