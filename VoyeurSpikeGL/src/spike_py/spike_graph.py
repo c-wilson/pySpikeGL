@@ -250,6 +250,13 @@ class SpikeGraph(QtGui.QWidget):
                 self.last_trigger_idx = th_idx
             else:
                 print 'trigger reject'
+
+    def toggle_filter(self):
+        if self.filtering:
+            self.filtering = False
+        else:
+            self.filtering = True
+        return
         
                 
         
@@ -290,6 +297,15 @@ class GraphWidget(galry.GalryWidget):
         self.popMenu.addAction(QtGui.QAction("Reset View", self,
                 statusTip="Cut the current selection's contents to the clipboard",
                 triggered=self.interaction_manager.processors['navigation'].process_reset_event))
+        if self.parent_widget.filtering:
+            filt_label = 'Show Unfiltered'
+        else:
+            filt_label = 'Show Filtered'
+        self.popMenu.addAction(QtGui.QAction(filt_label,self,
+                                             statusTip = 'show all signals unfiltered',
+                                             triggered = self.parent_widget.toggle_filter))
+        self.popMenu.a
+
 
         self.popMenu.exec_(event.globalPos())
         self.pause_update_ui()
