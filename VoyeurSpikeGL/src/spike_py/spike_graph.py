@@ -216,7 +216,7 @@ class SpikeGraph(QtGui.QWidget):
         if self.disp_samples is not None:
             self.triggered = False  # we've acted on the trigger, so we will start looking for new triggers next time.
             if self.filtering:
-                self.disp_samples = self.filter_signal(self.disp_samples)  # bandpass filter.
+                self.filter_signal()  # bandpass filter.
             # print 'final' + str(time.time() - self.stime)
             self.graph_trigger.emit()
         #         print time.time() - self.stime
@@ -233,15 +233,13 @@ class SpikeGraph(QtGui.QWidget):
         return
 
 
-    def filter_signal(self, sig):
+    def filter_signal(self):
         if self.filtering:
-            #             tm = time.time()
             # print self.e_phys_channel_number
-            sig[:self.e_phys_channel_number, :] = signal.filtfilt(self.signal_filter[0],
+            self.disp_samples[:self.e_phys_channel_number, :] = signal.filtfilt(self.signal_filter[0],
                                                                   self.signal_filter[1],
-                                                                  sig[:self.e_phys_channel_number, :])
-        # print time.time() - tm
-        return sig
+                                                                  self.disp_samples[:self.e_phys_channel_number, :])
+        return
 
     def find_trigger(self):
         self.th = self.buffer.samples[self.trigger_ch, :] > np.float64(.04)  # TTL threshold rounded down.
@@ -428,12 +426,12 @@ class GraphWidget(galry.GalryWidget):
             #TODO: make the widgets use a view of the parent.display_samples array.
             self.samples = self.parent_widget.disp_samples[self.channel_mapping, :]
             # self.samples = self.parent_widget.samples[self.channel_mapping,:]
-            self.p_samples = self.samples * self.interaction_manager.processors['navigation'].scalar + self.offsets
+            self.p_samples = self.samples * self.interaction_manager.processors['navigation'].scalar
+            self.p_samples += self.offsets
             num_samples = self.samples.shape[1]
             if num_samples != self.num_samples:
                 self.num_samples = num_samples
                 self.x = np.tile(np.linspace(-1., 1., num_samples), (len(self.channels), 1))
-
                 self.paint_manager.reinitialize_visual(visual='plots', x=self.x, y=self.p_samples, autocolor=True)
                 self.updateGL()
             else:
@@ -446,10 +444,11 @@ class GraphWidget(galry.GalryWidget):
 
     def zoom_y(self):
         if hasattr(self, 'samples'):
-            self.processed_samples = self.samples * self.interaction_manager.processors[
-                'navigation'].scalar + self.offsets
+            self.p_samples = self.samples * self.interaction_manager.processors[
+                'navigation'].scalar
+            self.p_samples += self.offsets
             self.paint_manager.set_data(visual='plots',
-                                        position=np.vstack((self.x.ravel(), self.processed_samples.ravel())).T)
+                                        position=np.vstack((self.x.ravel(), self.p_samples.ravel())).T)
             self.updateGL()
         else:
             pass
