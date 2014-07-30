@@ -235,7 +235,6 @@ class SpikeGraph(QtGui.QWidget):
 
     def filter_signal(self):
         if self.filtering:
-            # print self.e_phys_channel_number
             self.disp_samples[:self.e_phys_channel_number, :] = signal.filtfilt(self.signal_filter[0],
                                                                   self.signal_filter[1],
                                                                   self.disp_samples[:self.e_phys_channel_number, :])
@@ -268,6 +267,12 @@ class SpikeGraph(QtGui.QWidget):
     def change_display_period(self, new_val):
         print new_val
         self.display_period = new_val
+        if self.display_period >= 3000:
+            self.refresh_period_ms = self.display_period / 2
+        else:
+            self.refresh_period_ms = 1000
+        self.timer.setInterval(self.refresh_period_ms)
+        print self.refresh_period_ms
         for widget in self.graph_widgets:
             widget.interaction_manager.processors['navigation'].sx = 1.
             widget.interaction_manager.processors['navigation'].transform_view()
@@ -576,7 +581,6 @@ a.system_window.show()
 
 mw.show()
 a.timer.start(1000)
-
 if __name__ == '__main__':
     import sys
 
