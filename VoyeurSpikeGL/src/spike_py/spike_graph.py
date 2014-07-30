@@ -18,8 +18,7 @@ class Main(QtGui.QMainWindow):
     def keyPressEvent(self, event):
         print 'press'
     def closeEvent(self,e):
-        print' close event'
-        qApp.quit()
+        app.quit()
 
 
 #TODO: implement unified zooming of widgets to be an option.
@@ -43,18 +42,17 @@ class SpikeGraph(QtGui.QWidget):
     
     
     last_trigger_idx = 0
-    _head_idx = 0
     triggering = False
     triggered = False
     trigger_offset_ms = 300 #time before the trigger that you want to display
-    buffer_len = 20833*10
+    buffer_len = 20833*6
     
     filtering = True
     
-    def __init__(self, probe_type, system_config, 
+    def __init__(self, probe_type, system_config,
                  refresh_period_ms = 1000, display_period = 1000, 
-                 trigger_ch = 66, **kwargs):
-        
+                 trigger_ch = 66, q_app = None, **kwargs):
+        self.qApp = q_app
         self.refresh_period_ms = refresh_period_ms
         self.display_period = display_period
         super(SpikeGraph, self).__init__()
@@ -69,10 +67,12 @@ class SpikeGraph(QtGui.QWidget):
         self.init_timer()
         self._pause_ui_sig.connect(self.pause_update_ui)
         self.build_filter()
+
         
-    def closeEvent(self):
+    def closeEvent(self,e):
         print' close event'
-        qApp.quit()
+        if self.qApp:
+            self.qApp.quit()
     
     def init_acquisition(self,acquisition_source):
         
@@ -130,16 +130,25 @@ class SpikeGraph(QtGui.QWidget):
             if event.key() == QtCore.Qt.Key_P:
                 self.pause_acquire()
             if event.key() == QtCore.Qt.Key_T:
-                self.set_triggering_mode()
+                self.toggle_trigger()
             event.accept()
-            
-    def set_triggering_mode(self):
-        if self.triggering:
-            self.triggering = False
-            print 'Leaving graph_trigger mode.'
+
+    @QtCore.pyqtSlot(int)
+    def toggle_trigger(self, checked = None):
+        if checked is not None:
+            if checked == 2:
+                self.triggering = True
+            elif checked == 0:
+                self.triggering = False
         else:
-            self.triggering = True
-            print 'Trigger mode set: waiting for graph_trigger on ch: ' + str(self.trigger_ch) + '.'
+            if self.triggering:
+                self.triggering = False
+                self.triggering_checkbox.setChecked(False)
+                print 'Leaving graph_trigger mode.'
+            else:
+                self.triggering_checkbox.setChecked(True)
+                self.triggering = True
+                print 'Trigger mode set: waiting for graph_trigger on ch: ' + str(self.trigger_ch) + '.'
         return
         
     def pause_acquire(self):
@@ -188,17 +197,16 @@ class SpikeGraph(QtGui.QWidget):
 #         print self.new_samples[:,64]
 #         self.filter_signal()
         
-
         if self.pause_ui or self.updating: #we don't need to mess with anything else here, so lets get out.
             return
         self.updating = True
         disp_period_sample_num = self.source.fs * self.display_period/1000
         
-        
         if not self.triggering:
             self.disp_samples = self.buffer.sample_range(disp_period_sample_num)
         elif self.triggering and not self.triggered:
-            self.find_trigger()            
+            self.disp_samples = None
+            self.find_trigger()
         if self.triggering and self.triggered:
             trigger_offset_samples = self.source.fs * self.trigger_offset_ms/1000
             disp_tail_idx = (self.last_trigger_idx - trigger_offset_samples)%self.buffer.buffer_len # index of first sample to display.
@@ -237,25 +245,96 @@ class SpikeGraph(QtGui.QWidget):
         self.th = self.buffer.samples[self.trigger_ch,:] > np.float64(.04) #TTL threshold rounded down.
         if np.any(self.th):
             th_edges = np.convolve([1,-1], self.th, mode='same')
-#             th_edges = np.diff(self.th)
             th_idx = np.where(th_edges == 1) #THIS IS FOR UPWARD EDGES!
-#             print th_idx
             th_idx = th_idx[0][-1]
-#             print th_idx  
-#             print self._head_idx
-#             print type(th_idx)                        
-            if self.last_trigger_idx != th_idx and th_idx != 0 and th_idx != self._head_idx: #very very rare that two triggers will happen in the same idx position.
+            if not (self.last_trigger_idx == th_idx or th_idx == 0 or th_idx == self.buffer.head_idx): #very very rare that two triggers will happen in the same idx position.
                 # dont want the trigger to be 0 or to be == to the head_idx.
                 self.triggered = True
                 self.last_trigger_idx = th_idx
             else:
                 print 'trigger reject'
 
-    def toggle_filter(self):
-        if self.filtering:
+    @QtCore.pyqtSlot(int)
+    def toggle_filter(self,state):
+        print state
+        if state == 0:
             self.filtering = False
-        else:
+        elif state == 2:
             self.filtering = True
+        return
+    @QtCore.pyqtSlot(int)
+    def change_display_period(self,new_val):
+        print new_val
+        self.display_period = new_val
+        for widget in self.graph_widgets:
+            widget.interaction_manager.processors['navigation'].sx = 1.
+            widget.interaction_manager.processors['navigation'].transform_view()
+
+    @QtCore.pyqtSlot(QtCore.QEvent)
+    def reset_all_views(self,event):
+        for widget in self.graph_widgets:
+            widget.interaction_manager.processors['navigation'].process_reset_event(event)
+
+    @QtCore.pyqtSlot(int)
+    def set_trigger_offset(self, new_val):
+        self.trigger_offset_ms = new_val
+
+
+    def build_parent_menu(self):
+        self.parent_menu_items = QtGui.QWidget()
+        self.parent_menu_items_layout = QtGui.QGridLayout(self.parent_menu_items)
+        self.parent_menu_items_layout.setMargin(0)
+        self.parent_menu_items_layout.setSpacing(0)
+        self.filter_check = QtGui.QCheckBox('Apply filter',self.parent_menu_items)
+        self.filter_check.setChecked(self.filtering)
+        self.filter_check.stateChanged.connect(self.toggle_filter)
+        self.pause_checked = QtGui.QCheckBox('Pause All',self.parent_menu_items)
+        self.pause_checked.setChecked = False
+        self.pause_checked.stateChanged.connect(self.pause_update_ui)
+
+        self.display_period_label = QtGui.QLabel('Display Period:')
+
+        self.display_period_spinbox = QtGui.QSpinBox(self.parent_menu_items)
+        self.display_period_spinbox.setRange(100,5000)
+        self.display_period_spinbox.setSuffix(' ms')
+        self.display_period_spinbox.setValue(self.display_period)
+        self.display_period_spinbox.setSingleStep(100)
+        self.display_period_spinbox.valueChanged.connect(self.change_display_period)
+        self.line = QtGui.QFrame()
+        self.line.setFrameStyle(QtGui.QFrame.HLine)
+        self.line2 = QtGui.QFrame()
+        self.line2.setFrameStyle(QtGui.QFrame.HLine)
+
+        self.triggering_checkbox = QtGui.QCheckBox('Wait for trigger', self.parent_menu_items)
+        self.triggering_checkbox.setChecked(self.triggering)
+        self.triggering_checkbox.stateChanged.connect(self.toggle_trigger)
+        self.triggering_label = QtGui.QLabel('Trigger offset:')
+
+        self.trigger_offset_spinbox = QtGui.QSpinBox(self.parent_menu_items)
+        self.trigger_offset_spinbox.setMinimum(0)
+        self.trigger_offset_spinbox.setMaximum(self.display_period)
+        self.trigger_offset_spinbox.setValue(self.trigger_offset_ms)
+        self.trigger_offset_spinbox.setSingleStep(10)
+        self.trigger_offset_spinbox.setSuffix(' ms')
+        self.trigger_offset_spinbox.valueChanged.connect(self.set_trigger_offset)
+
+        self.parent_menu_items_layout.addWidget(self.filter_check,1,0,1,1)
+        self.parent_menu_items_layout.addWidget(self.pause_checked,0,0,1,1)
+        self.parent_menu_items_layout.addWidget(self.line,2,0,1,1)
+        self.parent_menu_items_layout.addWidget(self.display_period_label,3,0,1,1)
+        self.parent_menu_items_layout.addWidget(self.display_period_spinbox,4,0,1,1)
+        self.parent_menu_items_layout.addWidget(self.line2,5,0,1,1)
+        self.parent_menu_items_layout.addWidget(self.triggering_checkbox,6,0,1,1)
+        self.parent_menu_items_layout.addWidget(self.triggering_label,7,0)
+        self.parent_menu_items_layout.addWidget(self.trigger_offset_spinbox,8,0,1,1)
+
+
+
+
+
+
+    def mouseDoubleClickEvent(self, event):
+
         return
         
                 
@@ -264,18 +343,20 @@ class SpikeGraph(QtGui.QWidget):
         
 
 class GraphWidget(galry.GalryWidget):
-    pause = False
-    _pause_ui = False
-    pause_label = 'Pause'
+
+    def closeEvent(self,e):
+        app.quit()
     
-    
-    def __init__(self, params, global_channel_mapping, parent):
+    def __init__(self, params= None, global_channel_mapping = None, parent = SpikeGraph):
         self.parent_widget = parent
         self.channels = params['channels']
         self.channel_mapping = self.calculate_channel_mapping(global_channel_mapping) 
         self.sites = params['site_numbers']
         self.position = params['grid_position']
         self.num_samples = 0
+        self.pause_label = 'Pause widget'
+        self.pause = False
+        self._pause_ui = False
         super(GraphWidget,self).__init__()
         parent._pause_ui_sig.connect(self.pause_update_ui)
         
@@ -289,27 +370,33 @@ class GraphWidget(galry.GalryWidget):
         return channel_map_array
         
     def mouseDoubleClickEvent(self,event):
-        self.pause_update_ui()
+
         self.popMenu = QtGui.QMenu()
-        anaction = self.popMenu.addAction(QtGui.QAction(self.pause_label, self,
-                statusTip="Cut the current selection's contents to the clipboard",
-                triggered=self.pause_acquire))
-        self.popMenu.addAction(QtGui.QAction("Reset View", self,
+        self.pause_widget_checkbox = QtGui.QCheckBox('Pause widget')
+        self.pause_widget_checkbox.setChecked(self.pause)
+        self.pause_widget_checkbox.stateChanged.connect(self.pause_acquire)
+        act0 = QtGui.QWidgetAction(self)
+        act0.setDefaultWidget(self.pause_widget_checkbox)
+        self.popMenu.addAction(act0)
+        self.parent_widget.build_parent_menu()
+        act = QtGui.QWidgetAction(self)
+        act.setDefaultWidget(self.parent_widget.parent_menu_items)
+        self.popMenu.addAction(act)
+        self.popMenu.addSeparator()
+        self.popMenu.addAction(QtGui.QAction("Reset widget view", self,
                 statusTip="Cut the current selection's contents to the clipboard",
                 triggered=self.interaction_manager.processors['navigation'].process_reset_event))
-        if self.parent_widget.filtering:
-            filt_label = 'Show Unfiltered'
-        else:
-            filt_label = 'Show Filtered'
-        self.popMenu.addAction(QtGui.QAction(filt_label,self,
-                                             statusTip = 'show all signals unfiltered',
-                                             triggered = self.parent_widget.toggle_filter))
-        self.popMenu.a
+        self.popMenu.addAction(QtGui.QAction("Reset all views", self,
+                statusTip="Cut the current selection's contents to the clipboard",
+                triggered=self.parent_widget.reset_all_views))
 
 
         self.popMenu.exec_(event.globalPos())
-        self.pause_update_ui()
+
+        event.ignore()
         return
+
+
     
     def mousePressEvent(self, e):
         self.parent_widget._pause_ui_sig.emit()
@@ -385,15 +472,13 @@ class GraphWidget(galry.GalryWidget):
         self.offsets = np.linspace((y_limits[0]+end_step_size), (y_limits[1]-end_step_size), steps)[:,np.newaxis]        
         return self.offsets
 
-    @QtCore.pyqtSlot()
-    def pause_acquire(self):
-        if self.pause:
-            self.pause = False
-            self.pause_label = 'Pause'
-        else:
+    @QtCore.pyqtSlot(int)
+    def pause_acquire(self,val= None):
+        if val == 2:
             self.pause = True
-            self.pause_label = 'Unpause'
-        return
+        elif val == 0:
+            self.pause = False
+
     
     @QtCore.pyqtSlot()
     def pause_update_ui(self): 
@@ -478,7 +563,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 2000)
+a = SpikeGraph('J_HIRES_4x16','acute2', acquisition_source = 'SpikeGL', refresh_period_ms = 1000, display_period = 2000,q_app = app)
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background,QtCore.Qt.black)
 mw.setPalette(palette)
@@ -507,7 +592,6 @@ if __name__ == '__main__':
         print 'running'
         
         app = QtGui.QApplication.exec_()
-        print 'done'
         a.source.close_connect()
     
         
