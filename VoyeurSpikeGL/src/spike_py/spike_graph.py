@@ -296,8 +296,8 @@ class SpikeGraph(QtGui.QWidget):
         self.filter_check.setChecked(self.filtering)
         self.filter_check.stateChanged.connect(self.toggle_filter)
         self.pause_checked = QtGui.QCheckBox('Pause All', self.parent_menu_items)
-        self.pause_checked.setChecked = False
-        self.pause_checked.stateChanged.connect(self.pause_update_ui)
+        self.pause_checked.setChecked(self.pause)
+        self.pause_checked.stateChanged.connect(self.pause_acquire)
 
         self.display_period_label = QtGui.QLabel('Display Period:')
 
