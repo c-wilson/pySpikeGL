@@ -3,14 +3,16 @@ Created on Jul 2, 2014
 
 @author: chris
 '''
+import time
+
 import galry
 import numpy as np
 from scipy import signal
-from probe_definitions import probes
-from system_definitions import systems
-from sgl_interface import SGLInterface, TestInterface
 from PyQt4 import QtCore, QtGui
-import time
+
+from system_plugins.probe_definitions import probes
+from system_plugins.system_definitions import systems
+from acq_interfaces.sgl_interface import SGLInterface, TestInterface
 from buffers import CircularBuffer
 
 
@@ -23,35 +25,34 @@ class Main(QtGui.QMainWindow):
 
 
 # TODO: implement unified zooming of widgets to be an option.
-#TODO: implement quitting mechanism that will destroy all windows and quit the QApplication.
-#TODO: implement mutex for acquisition system - graphing system shared variables or move them into signals
-#TODO: move acquisition into multiprocessing process?
+# TODO: implement quitting mechanism that will destroy all windows and quit the QApplication.
+# TODO: implement mutex for acquisition system - graphing system shared variables or move them into signals
+# TODO: move acquisition into multiprocessing process?
 
 
 class SpikeGraph(QtGui.QWidget):
     '''
     classdocs
     '''
-    pause = False  # pauses graphing updates AND acquisition.
-    pause_ui = False  # only pauses the ui, not the acquisition.
-    updating = False
 
     graph_trigger = QtCore.pyqtSignal()
     acquisition_trigger = QtCore.pyqtSignal(list, int)
     _pause_ui_sig = QtCore.pyqtSignal()
     QUIT_TRIGGER = QtCore.pyqtSignal()
 
-    last_trigger_idx = 0
-    triggering = False
-    triggered = False
-    trigger_offset_ms = 300  # time before the trigger that you want to display
-    buffer_len = 20833 * 6
-
-    filtering = True
-
     def __init__(self, probe_type, system_config,
                  refresh_period_ms=1000, display_period=1000,
                  trigger_ch=66, q_app=None, **kwargs):
+
+        self.filtering = True
+        self.buffer_len = 20833 * 6
+        self.triggering = False
+        self.last_trigger_idx = 0
+        self.triggered = False
+        self.trigger_offset_ms = 300  # time before the trigger that you want to display
+        self.pause = False  # pauses graphing updates AND acquisition.
+        self.pause_ui = False  # only pauses the ui, not the acquisition.
+        self.updating = False
         self.qApp = q_app
         self.refresh_period_ms = refresh_period_ms
         self.display_period = display_period
@@ -236,8 +237,9 @@ class SpikeGraph(QtGui.QWidget):
     def filter_signal(self):
         if self.filtering:
             self.disp_samples[:self.e_phys_channel_number, :] = signal.filtfilt(self.signal_filter[0],
-                                                                  self.signal_filter[1],
-                                                                  self.disp_samples[:self.e_phys_channel_number, :])
+                                                                                self.signal_filter[1],
+                                                                                self.disp_samples[
+                                                                                :self.e_phys_channel_number, :])
         return
 
     def find_trigger(self):
@@ -247,7 +249,7 @@ class SpikeGraph(QtGui.QWidget):
             th_idx = np.where(th_edges == 1)  # THIS IS FOR UPWARD EDGES!
             th_idx = th_idx[0][-1]
             if not (
-                        self.last_trigger_idx == th_idx or th_idx == 0 or th_idx == self.buffer.head_idx):  # very very rare that two triggers will happen in the same idx position.
+                                self.last_trigger_idx == th_idx or th_idx == 0 or th_idx == self.buffer.head_idx):  # very very rare that two triggers will happen in the same idx position.
                 # dont want the trigger to be 0 or to be == to the head_idx.
                 self.triggered = True
                 self.last_trigger_idx = th_idx
