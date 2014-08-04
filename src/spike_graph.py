@@ -9,10 +9,10 @@ import galry
 import numpy as np
 from scipy import signal
 from PyQt4 import QtCore, QtGui
+from acq_interfaces.sgl_interface import SGLInterface, TestInterface
 
 from system_plugins.probe_definitions import probes
 from system_plugins.system_definitions import systems
-from acq_interfaces.sgl_interface import SGLInterface, TestInterface
 from buffers import CircularBuffer
 
 
