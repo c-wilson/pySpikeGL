@@ -48,19 +48,19 @@ class AbstractProbe(object):
 
 class J_HIRES_4x16(AbstractProbe):
     def build_window_params(self, interface):
-        window1 = {'channels': np.array([49, 46, 48, 47, 51, 44, 50, 45, 53, 43, 52, 42, 55, 41, 54, 40]),
+        window1 = {'channels': np.array([0,31,1,30,2,29,3,28,4,27,5,26,6,25,7,24]),
                    'site_numbers': np.array([10, 7, 9, 8, 12, 5, 11, 6, 14, 3, 13, 4, 16, 1, 15, 2]),
                    'grid_position': (0, 0, 1, 1)
         }
-        window2 = {'channels': np.array([29, 7, 27, 25, 6, 5, 31, 4, 28, 3, 26, 2, 24, 1, 30, 0]),
+        window2 = {'channels': np.array([16,12,8,17,15,18,11,19,14,20,10,21,13,22,9,23]),
                    'site_numbers': np.array([26, 23, 25, 24, 28, 21, 27, 22, 30, 19, 29, 20, 32, 17, 31, 18]),
                    'grid_position': (0, 1, 1, 1)
         }
-        window3 = {'channels': np.array([33, 35, 32, 36, 59, 38, 63, 56, 58, 34, 62, 37, 57, 39, 61, 60]),
+        window3 = {'channels': np.array([60,32,33,56,34,63,35,59,36,62,37,58,38,61,39,57]),
                    'site_numbers': np.array([41, 40, 42, 39, 43, 38, 44, 37, 45, 36, 46, 35, 47, 34, 48, 33]),
                    'grid_position': (1, 1, 1, 1)
         }
-        window4 = {'channels': np.array([23, 9, 22, 13, 21, 10, 20, 14, 19, 11, 18, 15, 17, 8, 12, 16]),
+        window4 = {'channels': np.array([47,48,46,49,45,50,44,51,43,52,4253,41,54,40,55]),
                    'site_numbers': np.array([57, 56, 58, 55, 59, 54, 60, 53, 61, 52, 62, 51, 63, 50, 64, 49]),
                    'grid_position': (1, 0, 1, 1)
         }
