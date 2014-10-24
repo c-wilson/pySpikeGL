@@ -10,6 +10,14 @@ from PyQt4 import QtCore
 from math import pow
 
 
+
+
+
+
+
+
+
+
 class TestInterface(object):
     fs = 20833
 
@@ -17,7 +25,7 @@ class TestInterface(object):
         return 0.01 * np.random.randn(len(channels), self.fs * 2)
 
 
-class SGLInterface(QtCore.QObject):
+class SGLInterface256ch(QtCore.QObject):
     '''
     classdocs
     '''
@@ -27,12 +35,16 @@ class SGLInterface(QtCore.QObject):
     params = None
     adc_scale = None
 
+    channel_order = {'64ch': {'connector_1': [24, 25, 26, 27, 28, 30,  0,  2,  4,  6, 29, 31,  1,  3,  5,  7, 45,
+                                              47, 49, 51, 53, 55, 40, 41, 42, 43, 44, 46, 48, 50, 52, 54],
+                              'connector_2': [23, 22, 21, 20, 19, 17, 16, 15, 14, 13, 18, 12,  8, 11, 10,  9, 34,
+                                              60, 56, 59, 58, 57, 39, 38, 37, 36, 35, 33, 32, 63, 62, 61]}}
 
     def __init__(self, **kwargs):
         '''
         Constructor
         '''
-        super(SGLInterface, self).__init__()
+        super(SGLInterface256ch, self).__init__()
         self.net_client = NetClient()
         self.query_acquire()
         self.fs = 20833
@@ -380,7 +392,7 @@ class NetClient(object):
 
 
 if __name__ == '__main__':
-    test = SGLInterface()
+    test = SGLInterface256ch()
     time.sleep(1)
     params = test.get_params()
     time.sleep(1)

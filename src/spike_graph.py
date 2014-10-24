@@ -9,7 +9,7 @@ import galry
 import numpy as np
 from scipy import signal
 from PyQt4 import QtCore, QtGui
-from acq_interfaces.sgl_interface import SGLInterface, TestInterface
+from acq_interfaces.sgl_interface import SGLInterface256ch, TestInterface
 
 from system_plugins.probe_definitions import probes
 from system_plugins.system_definitions import systems
@@ -25,7 +25,6 @@ class Main(QtGui.QMainWindow):
 
 
 # TODO: implement unified zooming of widgets to be an option.
-# TODO: implement quitting mechanism that will destroy all windows and quit the QApplication.
 # TODO: implement mutex for acquisition system - graphing system shared variables or move them into signals
 # TODO: move acquisition into multiprocessing process?
 
@@ -82,7 +81,7 @@ class SpikeGraph(QtGui.QWidget):
         if acquisition_source == 'TEST':
             self.source = TestInterface()
         if acquisition_source == 'SpikeGL':
-            self.source = SGLInterface()
+            self.source = SGLInterface256ch()
 
         #TODO: Get acquisition params from spikeGL to inform ADC gain value
 
