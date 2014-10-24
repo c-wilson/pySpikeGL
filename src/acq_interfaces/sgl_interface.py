@@ -8,6 +8,7 @@ import time
 import numpy as np
 from PyQt4 import QtCore
 from math import pow
+from copy import deepcopy
 
 
 class TestInterface(object):
@@ -40,6 +41,7 @@ class SGLInterface256ch(QtCore.QObject):
         self.net_client = NetClient()
         self.query_acquire()
         self.fs = 20833
+        self.buffer = bytearray(int(2e8))
         return
 
 
@@ -239,29 +241,25 @@ class SGLInterface256ch(QtCore.QObject):
         chan_str = ''
         for ch in channels:
             chan_str = chan_str + str(ch) + '#'
+        num_channels = len(channels)
+        l2 = 'BINARY DATA ' + str(num_samples) + ' ' + str(num_channels) + '\n'
         line = 'GETDAQDATA ' + str(start_sample) + ' ' + str(num_samples) + ' ' + chan_str + ' 1'
-        # print line
         self.net_client.send_string(line)
-        self.bufstr = self.net_client.recieve_ok(1048576, close, 1000, True)
-        # print 'length buffer' +str(len(self.bufstr))
-        handshake, _, self.buf = self.bufstr.partition('\n')
-        dims = handshake.split(' ')
-        # print dims
-        if len(self.buf) < int(dims[2]) * int(dims[3]) + 2:
-            self.buf = self.buf + self.net_client.recieve_ok(20971520, close, 20)
-            print 'short'
-        try:
-            data = np.fromstring(self.buf, dtype=np.int16, count=int(dims[3]) * int(dims[2]))
-            data = data.astype(np.float64, copy=False)
-        except:
-            #             print bufstr
-            print 'length buff: ' + str(len(self.buf))
-            print 'handshake: ' + handshake
-            return None
-
-        data.shape = (int(dims[3]), int(dims[2]))
+        to_read = len(l2) + 3 + num_samples * len(channels) * 2
+        to_read_total = deepcopy(to_read)
+        # buffer = bytearray(to_read)
+        view = memoryview(self.buffer)
+        while to_read:
+            nbytes = self.net_client.sock.recv_into(view, to_read)
+            # print nbytes
+            view = view[nbytes:]  # slicing views is cheap
+            to_read -= nbytes
+        data = np.frombuffer(self.buffer[len(l2):to_read_total - 3], dtype=np.int16)
+        # print data.shape
+        data.shape = (num_samples, num_channels)
+        # print data.shape
         #         arr.shape = (int(dims[3]),int(dims[2])) THIS WOULD RESHAPE TO BE FORTRANIC.
-        return data.T * self.adc_scale
+        return data.transpose().astype(np.float64, copy=True) * self.adc_scale
 
     @QtCore.pyqtSlot(list, int)
     def get_next_data(self, channels, max_read=5000):
@@ -350,14 +348,15 @@ class NetClient(object):
             self._reconnect()
         return recieved
 
-    def recieve_ok(self, buffer_size=2048, close=True, iterations=10, return_all=False):
-        self.recv_buffer = []
+    def recieve_ok(self, buffer_size=1024, close=True, iterations=10, return_all=False):
+        recv_buffer = []
         recieved = ''
         tries = 0
         while recieved.find('OK\n') == -1 and recieved.find('ERROR') == -1 and tries < iterations:
-            recieved = self.recieve_string(buffer_size)
+            # recieved = self.recieve_string(buffer_size)
+            recieved = self.sock.recv(buffer_size)
             if recieved:
-                self.recv_buffer.append(recieved)
+                recv_buffer.append(recieved)
             tries += 1
 
         # print tries
@@ -368,18 +367,18 @@ class NetClient(object):
         elif tries >= iterations:
             print 'Conducted ' + str(iterations) + ' without recieving OK'
         else:
-            self.recv_str = ''.join(self.recv_buffer)
+            recv_str = ''.join(recv_buffer)
         # print 'joining'
         if close:
             self.close()  # close socket...
 
         if return_all is False:
-            self.recv_str = self.recv_str[:self.recv_str.find('\nOK')]
+            recv_str = recv_str[:recv_str.find('\nOK')]
 
-        if self.recv_str == '':
+        if recv_str == '':
             return True
         else:
-            return self.recv_str
+            return recv_str
 
 
 if __name__ == '__main__':
