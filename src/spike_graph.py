@@ -99,6 +99,13 @@ class SpikeGraph(QtGui.QWidget):
         for idx, window in enumerate(probe.window_params):
             channels = window['channels'].tolist()
             acquisition_channels.extend(channels)
+        acquisition_channels.extend(probe.data['non_displayed_chans'])
+        if len(np.unique(acquisition_channels)) != len(acquisition_channels):
+            tmp = np.array(acquisition_channels)
+            for i in np.unique(tmp):
+                if np.sum(tmp == i) > 1:
+                    print 'duplicate of channel ' + str(i) + ' found!'
+            raise ValueError('Duplicate channels found in probe definition.')
         self.e_phys_channel_number = len(acquisition_channels)
         for idx, window in enumerate(system.window_params):
             channels = window['channels'].tolist()
@@ -559,8 +566,10 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
+a = SpikeGraph('NN_buz_64s', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
                q_app=app)
+# J_HIRES_4x16
+
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background, QtCore.Qt.black)
 mw.setPalette(palette)
