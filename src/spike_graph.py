@@ -34,7 +34,7 @@ class SpikeGraph(QtGui.QWidget):
     classdocs
     '''
 
-    graph_trigger = QtCore.pyqtSignal()
+    graph_trigger = QtCore.pyqtSignal(np.ndarray)
     acquisition_trigger = QtCore.pyqtSignal(list, int)
     _pause_ui_sig = QtCore.pyqtSignal()
     QUIT_TRIGGER = QtCore.pyqtSignal()
@@ -195,10 +195,10 @@ class SpikeGraph(QtGui.QWidget):
 
             # print 'done '+ str(time_take)
 
-    @QtCore.pyqtSlot()
-    def update_graphs(self):
+    @QtCore.pyqtSlot(np.ndarray)
+    def update_graphs(self, source_data):
         # self.stime = time.time()
-        self.buffer.add_samples(self.source.data)
+        self.buffer.add_samples(source_data)
         #         self.buffer.add_samples(np.random.rand(67,20000))
         # print time.time() - self.stime
         #         print self.new_samples[:,64]
@@ -225,7 +225,7 @@ class SpikeGraph(QtGui.QWidget):
             if self.filtering:
                 self.filter_signal()  # bandpass filter.
             # print 'final' + str(time.time() - self.stime)
-            self.graph_trigger.emit()
+            self.graph_trigger.emit(self.disp_samples)
         #         print time.time() - self.stime
         self.updating = False
         return
@@ -433,11 +433,11 @@ class GraphWidget(galry.GalryWidget):
         self.initialize_companion_classes()
 
 
-    @QtCore.pyqtSlot()
-    def update_graph_data(self):
+    @QtCore.pyqtSlot(np.ndarray)
+    def update_graph_data(self, disp_samples):
         if not self.pause and not self._pause_ui:
             #TODO: make the widgets use a view of the parent.display_samples array.
-            self.samples = self.parent_widget.disp_samples[self.channel_mapping, :]
+            self.samples = disp_samples[self.channel_mapping, :]
             # self.samples = self.parent_widget.samples[self.channel_mapping,:]
             self.p_samples = self.samples * self.interaction_manager.processors['navigation'].scalar
             self.p_samples += self.offsets

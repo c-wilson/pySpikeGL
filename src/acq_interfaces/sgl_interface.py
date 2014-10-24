@@ -10,14 +10,6 @@ from PyQt4 import QtCore
 from math import pow
 
 
-
-
-
-
-
-
-
-
 class TestInterface(object):
     fs = 20833
 
@@ -31,7 +23,7 @@ class SGLInterface256ch(QtCore.QObject):
     '''
     last_sample_read = 0
     acquiring = False
-    acquisition_complete = QtCore.pyqtSignal()
+    acquisition_complete = QtCore.pyqtSignal(np.ndarray)
     params = None
     adc_scale = None
 
@@ -259,18 +251,17 @@ class SGLInterface256ch(QtCore.QObject):
             self.buf = self.buf + self.net_client.recieve_ok(20971520, close, 20)
             print 'short'
         try:
-            self.data = np.fromstring(self.buf, dtype=np.int16, count=int(dims[3]) * int(dims[2]))
-            self.data = self.data.astype(np.float64, copy=False)
+            data = np.fromstring(self.buf, dtype=np.int16, count=int(dims[3]) * int(dims[2]))
+            data = data.astype(np.float64, copy=False)
         except:
             #             print bufstr
             print 'length buff: ' + str(len(self.buf))
             print 'handshake: ' + handshake
             return None
 
-        self.data.shape = (int(dims[3]), int(dims[2]))
+        data.shape = (int(dims[3]), int(dims[2]))
         #         arr.shape = (int(dims[3]),int(dims[2])) THIS WOULD RESHAPE TO BE FORTRANIC.
-        self.data = self.data.T * self.adc_scale
-        return
+        return data.T * self.adc_scale
 
     @QtCore.pyqtSlot(list, int)
     def get_next_data(self, channels, max_read=5000):
@@ -287,13 +278,13 @@ class SGLInterface256ch(QtCore.QObject):
             num_samples = max_read
             print 'reducing'
         if num_samples == 0:
-            self.data = np.array([], dtype=np.float64)
+            data = np.array([], dtype=np.float64)
             print 'no data'
             return None
         self.last_sample_read = current_sample
-        self.get_daq_data(current_sample, num_samples, channels, False)
+        data = self.get_daq_data(current_sample, num_samples, channels, False)
         # print time.time()-times
-        self.acquisition_complete.emit()
+        self.acquisition_complete.emit(data)
         return
 
 
