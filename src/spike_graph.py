@@ -27,6 +27,7 @@ class Main(QtGui.QMainWindow):
 # TODO: implement unified zooming of widgets to be an option.
 # TODO: implement mutex for acquisition system - graphing system shared variables or move them into signals
 # TODO: move acquisition into multiprocessing process?
+# TODO: execute filtering in multiprocessing.
 
 
 class SpikeGraph(QtGui.QWidget):
@@ -197,7 +198,7 @@ class SpikeGraph(QtGui.QWidget):
 
     @QtCore.pyqtSlot(np.ndarray)
     def update_graphs(self, source_data):
-        # self.stime = time.time()
+        # print time.time()-self.stime
         self.buffer.add_samples(source_data)
         #         self.buffer.add_samples(np.random.rand(67,20000))
         # print time.time() - self.stime
@@ -210,23 +211,23 @@ class SpikeGraph(QtGui.QWidget):
         disp_period_sample_num = self.source.fs * self.display_period / 1000
 
         if not self.triggering:
-            self.disp_samples = self.buffer.sample_range(disp_period_sample_num)
+            disp_samples = self.buffer.sample_range(disp_period_sample_num)
         elif self.triggering and not self.triggered:
-            self.disp_samples = None
+            disp_samples = None
             self.find_trigger()
         if self.triggering and self.triggered:
             trigger_offset_samples = self.source.fs * self.trigger_offset_ms / 1000
             disp_tail_idx = (
                                 self.last_trigger_idx - trigger_offset_samples) % self.buffer.buffer_len  # index of first sample to display.
-            self.disp_samples = self.buffer.sample_range(disp_period_sample_num,
+            disp_samples = self.buffer.sample_range(disp_period_sample_num,
                                                          tail=disp_tail_idx)  # returns false if the number of samples is not there.
-        if self.disp_samples is not None:
+        if disp_samples is not None:
             self.triggered = False  # we've acted on the trigger, so we will start looking for new triggers next time.
             if self.filtering:
-                self.filter_signal()  # bandpass filter.
+                disp_samples[:] = self.filter_signal(disp_samples[:])  # bandpass filter.
             # print 'final' + str(time.time() - self.stime)
-            self.graph_trigger.emit(self.disp_samples)
-        #         print time.time() - self.stime
+            self.graph_trigger.emit(disp_samples)
+        # print time.time() - self.stime
         self.updating = False
         return
 
@@ -240,13 +241,17 @@ class SpikeGraph(QtGui.QWidget):
         return
 
 
-    def filter_signal(self):
+    def filter_signal(self, disp_samples):
         if self.filtering:
-            self.disp_samples[:self.e_phys_channel_number, :] = signal.filtfilt(self.signal_filter[0],
-                                                                                self.signal_filter[1],
-                                                                                self.disp_samples[
-                                                                                :self.e_phys_channel_number, :])
-        return
+            # s = time.time()
+            a = disp_samples[:self.e_phys_channel_number, :]
+            # b = map(lambda x: signal.filtfilt(self.signal_filter[0], self.signal_filter[1], x), a)
+            b = signal.filtfilt(self.signal_filter[0],
+                                self.signal_filter[1],
+                                a)
+            a[:] = b
+            # print time.time()-s
+        return disp_samples
 
     def find_trigger(self):
         self.th = self.buffer.samples[self.trigger_ch, :] > np.float64(.04)  # TTL threshold rounded down.
@@ -434,34 +439,35 @@ class GraphWidget(galry.GalryWidget):
 
 
     @QtCore.pyqtSlot(np.ndarray)
-    def update_graph_data(self, disp_samples):
+    def update_graph_data(self, all_chan_samples):
         if not self.pause and not self._pause_ui:
             #TODO: make the widgets use a view of the parent.display_samples array.
-            self.samples = disp_samples[self.channel_mapping, :]
+            samples = all_chan_samples[self.channel_mapping, :]
             # self.samples = self.parent_widget.samples[self.channel_mapping,:]
-            self.p_samples = self.samples * self.interaction_manager.processors['navigation'].scalar
-            self.p_samples += self.offsets
-            num_samples = self.samples.shape[1]
+            p_samples = samples * self.interaction_manager.processors['navigation'].scalar
+            p_samples += self.offsets
+            num_samples = samples.shape[1]
             if num_samples != self.num_samples:
                 self.num_samples = num_samples
                 self.x = np.tile(np.linspace(-1., 1., num_samples), (len(self.channels), 1))
-                self.paint_manager.reinitialize_visual(visual='plots', x=self.x, y=self.p_samples, autocolor=True)
+                self.paint_manager.reinitialize_visual(visual='plots', x=self.x, y=p_samples, autocolor=True)
                 self.updateGL()
             else:
                 self.paint_manager.set_data(visual='plots',
-                                            position=np.vstack((self.x.ravel(), self.p_samples.ravel())).T, )
+                                            position=np.vstack((self.x.ravel(), p_samples.ravel())).T, )
                 self.updateGL()
+            self.samples = samples
             return
         else:
             pass
 
     def zoom_y(self):
         if hasattr(self, 'samples'):
-            self.p_samples = self.samples * self.interaction_manager.processors[
+            p_samples = self.samples * self.interaction_manager.processors[
                 'navigation'].scalar
-            self.p_samples += self.offsets
+            p_samples += self.offsets
             self.paint_manager.set_data(visual='plots',
-                                        position=np.vstack((self.x.ravel(), self.p_samples.ravel())).T)
+                                        position=np.vstack((self.x.ravel(), p_samples.ravel())).T)
             self.updateGL()
         else:
             pass
