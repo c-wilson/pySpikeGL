@@ -72,27 +72,27 @@ class J_HIRES_4x16(AbstractProbe):
 
 class NN_buz_64s(AbstractProbe):
     def build_window_params(self, interface):
-        window1 = {'channels': np.array([35, 60, 62, 33, 37, 59, 32, 63, 39, 61]),
+        window1 = {'channels': np.array([19, 12, 14, 17, 21, 11, 16, 15, 23, 13]),
                    'site_numbers': np.array([6, 5, 7, 4, 8, 3, 9, 2, 10, 1]),
                    'grid_position': (0, 0, 1, 1,)  # (row, column, rowSpan, columnSpan)
         }
-        window2 = {'channels': np.array([50, 38, 55, 52, 48, 36, 53, 54, 46, 34]),
+        window2 = {'channels': np.array([2, 22,  7,  4,  0, 20,  5, 6, 30, 18]),
                    'site_numbers': np.array([16, 15, 17, 14, 18, 13, 19, 12, 20, 11]),
                    'grid_position': (0, 1, 1, 1)
         }
-        window3 = {'channels': np.array([45, 47, 41, 40, 43, 49, 44, 42, 58, 51]),
+        window3 = {'channels': np.array([29, 31, 25, 24, 27,  1, 28, 26, 10,  3]),
                    'site_numbers': np.array([26, 25, 27, 24, 28, 23, 29, 22, 30, 21]),
                    'grid_position': (1, 0, 1, 1)
         }
-        window4 = {'channels': np.array([31, 10, 24, 9, 1, 8, 26, 56, 3, 57]),
+        window4 = {'channels': np.array([47, 58, 40, 57, 49, 56, 42,  8, 51,  9]),
                    'site_numbers': np.array([40, 35, 41, 34, 42, 33, 43, 32, 44, 31]),
                    'grid_position': (1, 1, 1, 1)
         }
-        window5 = {'channels': np.array([22, 2, 4, 7, 20, 0, 6, 5, 18, 30]),
+        window5 = {'channels': np.array([38, 50, 52, 55, 36, 48, 54, 53, 34, 46]),
                    'site_numbers': np.array([50, 49, 51, 48, 52, 47, 53, 46, 54, 45]),
                    'grid_position': (2, 0, 1, 1)
         }
-        window6 = {'channels': np.array([12, 19, 17, 14, 11, 21, 15, 16, 13, 23]),
+        window6 = {'channels': np.array([60, 35, 33, 62, 59, 37, 63, 32, 61, 39]),
                    'site_numbers': np.array([60, 59, 61, 58, 62, 57, 63, 56, 64, 55]),
                    'grid_position': (2, 1, 1, 1),
         }
