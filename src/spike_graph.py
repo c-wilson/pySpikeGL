@@ -224,7 +224,7 @@ class SpikeGraph(QtGui.QWidget):
         if disp_samples is not None:
             self.triggered = False  # we've acted on the trigger, so we will start looking for new triggers next time.
             if self.filtering:
-                disp_samples[:] = self.filter_signal(disp_samples[:])  # bandpass filter.
+                disp_samples[:] = maths.filter_signal(disp_samples[:], self.e_phys_channel_number, self.signal_filter)
             # print 'final' + str(time.time() - self.stime)
             self.graph_trigger.emit(disp_samples)
         # print time.time() - self.stime
@@ -570,35 +570,38 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
         self.parent.zoom_y()
 
 
-app = QtGui.QApplication([])
-mw = Main()
-a = SpikeGraph('NN_buz_64s', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
-               q_app=app)
-# J_HIRES_4x16
+if __name__ == '__main__':
+    import sys
+    import maths
 
-palette = QtGui.QPalette()
-palette.setColor(QtGui.QPalette.Background, QtCore.Qt.black)
-mw.setPalette(palette)
-mw.setCentralWidget(a)
-mw.setWindowTitle("Spike-rosoft SPIKESCOPE Viewer")
-dim_mw = QtCore.QRect(1700, -650, 1000, 1800)
-mw.setGeometry(dim_mw)
-# mw.showFullScreen()
-mw.showMaximized()
-dim_sw = QtCore.QRect(1150, 200, 400, 600)
-a.system_window.setGeometry(dim_sw)
-a.system_window.setWindowTitle('Spike-rosoft SPIKESCOPE Control')
-a.system_window.show()
+    app = QtGui.QApplication([])
+    mw = Main()
+    a = SpikeGraph('NN_buz_64s', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
+                   q_app=app)
+    # J_HIRES_4x16
+
+    palette = QtGui.QPalette()
+    palette.setColor(QtGui.QPalette.Background, QtCore.Qt.black)
+    mw.setPalette(palette)
+    mw.setCentralWidget(a)
+    mw.setWindowTitle("Spike-rosoft SPIKESCOPE Viewer")
+    dim_mw = QtCore.QRect(1700, -650, 1000, 1800)
+    mw.setGeometry(dim_mw)
+    # mw.showFullScreen()
+    mw.showMaximized()
+    dim_sw = QtCore.QRect(1150, 200, 400, 600)
+    a.system_window.setGeometry(dim_sw)
+    a.system_window.setWindowTitle('Spike-rosoft SPIKESCOPE Control')
+    a.system_window.show()
 
 # p = a.palette()
 # p.setColor(a.backgroundRole(), QtCore.Qt.black)
 # a.setPalette(p)
 
 
-mw.show()
-a.timer.start(1000)
-if __name__ == '__main__':
-    import sys
+    mw.show()
+    a.timer.start(1000)
+
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         print 'running'
