@@ -47,6 +47,7 @@ class SpikeGraph(QtGui.QWidget):
         self.buffer_len = 20833 * 6
         self.triggering = False
         self.last_trigger_idx = 0
+        self.last_trigger_sample = np.uint64(0)
         self.triggered = False
         self.trigger_offset_ms = 300  # time before the trigger that you want to display
         self.pause = False  # pauses graphing updates AND acquisition.
@@ -60,10 +61,10 @@ class SpikeGraph(QtGui.QWidget):
         probe = probes[probe_type]
         system = systems[system_config]
         self.init_acquisition(system.acquisition_system)
-        self.all_channels = self.build_channel_list(probe, system)
+        self.all_channels, self.channel_labels = self.build_channel_list(probe, system)
         self.buffer = CircularBuffer(len(self.all_channels), self.buffer_len)
         self.disp_samples = np.zeros((len(self.all_channels), self.source.fs * display_period / 1000), dtype=np.float64)
-        self.init_ui(probe, system, self.all_channels)
+        self.init_ui(probe, system, self.all_channels, self.channel_labels)
         self.init_timer()
         self._pause_ui_sig.connect(self.pause_update_ui)
         self.build_filter()
@@ -94,6 +95,13 @@ class SpikeGraph(QtGui.QWidget):
 
     def build_channel_list(self, probe,
                            system):  #defines a global channel list which will be used to pull data from acquisition source.
+        """
+        This returns a sorted channel list for all of the channels found in the probe and the system.
+        (ie if probe has channels [1,2] and acquisition system has channels [100, 101] returns [1,2,100,101]
+        :param probe:
+        :param system:
+        :return:
+        """
         acquisition_channels = []
         channel_idx = []
         for idx, window in enumerate(probe.window_params):
@@ -107,12 +115,13 @@ class SpikeGraph(QtGui.QWidget):
                     print 'duplicate of channel ' + str(i) + ' found!'
             raise ValueError('Duplicate channels found in probe definition.')
         self.e_phys_channel_number = len(acquisition_channels)
+        aux_channel_labels = {}
         for idx, window in enumerate(system.window_params):
-            channels = window['channels'].tolist()
-            acquisition_channels.extend(channels)
+            for chan, label in zip(window['channels'].tolist(), window['channel_fn']):
+                acquisition_channels.append(chan)
+                aux_channel_labels[label] = chan
         acquisition_channels.sort()
-
-        return acquisition_channels
+        return acquisition_channels, aux_channel_labels
 
     def init_ui(self, probe, system, channel_mapping):
 
@@ -124,7 +133,6 @@ class SpikeGraph(QtGui.QWidget):
         for widget in self.graph_widgets:
             position = widget.position
             window.addWidget(widget, position[0], position[1], position[2], position[3])
-
         self.system_window = SystemWidget(system.window_params[0], self.all_channels, self)
 
         self.setLayout(window)
@@ -214,12 +222,13 @@ class SpikeGraph(QtGui.QWidget):
         elif self.triggering and not self.triggered:
             self.disp_samples = None
             self.find_trigger()
-        if self.triggering and self.triggered:
+        if self.triggering and self.triggered:  # this might fail because we don't have enough samples in the buffer, so we'll get it next time.
             trigger_offset_samples = self.source.fs * self.trigger_offset_ms / 1000
             disp_tail_idx = (
-                                self.last_trigger_idx - trigger_offset_samples) % self.buffer.buffer_len  # index of first sample to display.
-            self.disp_samples = self.buffer.sample_range(disp_period_sample_num,
-                                                         tail=disp_tail_idx)  # returns false if the number of samples is not there.
+                            self.last_trigger_idx - trigger_offset_samples) % self.buffer.buffer_len  # index of first sample to display.
+
+            # IMPORTANT: the Buffer returns None if the number of samples is not there, so it will not update the display.
+            self.disp_samples = self.buffer.sample_range(disp_period_sample_num, tail=disp_tail_idx)
         if self.disp_samples is not None:
             self.triggered = False  # we've acted on the trigger, so we will start looking for new triggers next time.
             if self.filtering:
@@ -249,18 +258,29 @@ class SpikeGraph(QtGui.QWidget):
         return
 
     def find_trigger(self):
-        self.th = self.buffer.samples[self.trigger_ch, :] > np.float64(.04)  # TTL threshold rounded down.
+        self.th = self.buffer.samples[self.trigger_ch, :] > np.float64(425)  # laser w/ voltage div sits at 396
         if np.any(self.th):
             th_edges = np.convolve([1, -1], self.th, mode='same')
             th_idx = np.where(th_edges == 1)  # THIS IS FOR UPWARD EDGES!
             th_idx = th_idx[0][-1]
-            if not (
-                                self.last_trigger_idx == th_idx or th_idx == 0 or th_idx == self.buffer.head_idx):  # very very rare that two triggers will happen in the same idx position.
-                # dont want the trigger to be 0 or to be == to the head_idx.
+            head = self.buffer.head_idx
+            sample_count = self.buffer.sample_count
+
+            if th_idx == head or not th_idx:
+                trig_samp = 0
+            elif th_idx < head:
+                trig_samp = sample_count - (head - th_idx)
+            else:  # th_idx > head
+                trig_samp = sample_count - head - (self.buffer.buffer_len - th_idx)
+
+            if trig_samp > self.last_trigger_sample:
                 self.triggered = True
+                self.last_trigger_sample = trig_samp
                 self.last_trigger_idx = th_idx
+                print 'TRIGGERED!!'
             else:
-                print 'trigger reject'
+                pass
+            return
 
     @QtCore.pyqtSlot(int)
     def toggle_filter(self, state):
@@ -294,6 +314,13 @@ class SpikeGraph(QtGui.QWidget):
     def set_trigger_offset(self, new_val):
         self.trigger_offset_ms = new_val
 
+    @QtCore.pyqtSlot()
+    def set_trigger_channel(self):
+        for radio in self.triggering_radios:
+            if radio.isChecked():
+                ch_name = radio.text()
+                actual_ch = self.channel_labels[ch_name]
+                self.trigger_ch = self.all_channels.index(actual_ch)
 
     def build_parent_menu(self):
         self.parent_menu_items = QtGui.QWidget()
@@ -325,6 +352,27 @@ class SpikeGraph(QtGui.QWidget):
         self.triggering_checkbox.stateChanged.connect(self.toggle_trigger)
         self.triggering_label = QtGui.QLabel('Trigger offset:')
 
+        # ---- triggering menu---
+        if not hasattr(self, 'triggering_group'):
+            self.triggering_group = QtGui.QFrame(self.parent_menu_items)
+            self.triggering_group.setGeometry(QtCore.QRect(10, 140, 191, 171))
+            self.triggering_gridlayout = QtGui.QGridLayout(self.triggering_group)
+            self.triggering_gridlayout.setMargin(0)
+            self.triggering_gridlayout.setSpacing(0)
+            self.triggering_radios = []
+            for i, (label, ch) in enumerate(self.channel_labels.items()):
+                temp = QtGui.QRadioButton(label, self.triggering_group)
+                if self.trigger_ch == self.all_channels.index(ch):
+                    temp.setChecked(True)
+                self.triggering_radios.append(temp)
+                self.triggering_gridlayout.addWidget(temp, i, 0, 1, 1)
+                temp.toggled.connect(self.set_trigger_channel)
+            self.triggering_menu = QtGui.QMenu('Trigger source')
+            act = QtGui.QWidgetAction(self)
+            act.setDefaultWidget(self.triggering_group)
+            self.triggering_menu.addAction(act)
+        #  -------------------
+
         self.trigger_offset_spinbox = QtGui.QSpinBox(self.parent_menu_items)
         self.trigger_offset_spinbox.setMinimum(0)
         self.trigger_offset_spinbox.setMaximum(self.display_period)
@@ -342,7 +390,6 @@ class SpikeGraph(QtGui.QWidget):
         self.parent_menu_items_layout.addWidget(self.triggering_checkbox, 6, 0, 1, 1)
         self.parent_menu_items_layout.addWidget(self.triggering_label, 7, 0)
         self.parent_menu_items_layout.addWidget(self.trigger_offset_spinbox, 8, 0, 1, 1)
-
 
 class GraphWidget(galry.GalryWidget):
     def closeEvent(self, e):
@@ -384,6 +431,7 @@ class GraphWidget(galry.GalryWidget):
         act = QtGui.QWidgetAction(self)
         act.setDefaultWidget(self.parent_widget.parent_menu_items)
         self.popMenu.addAction(act)
+        self.popMenu.addMenu(self.parent_widget.triggering_menu)  # this must be added separately...
         self.popMenu.addSeparator()
         self.popMenu.addAction(QtGui.QAction("Reset widget view", self,
                                              statusTip="Cut the current selection's contents to the clipboard",
@@ -566,9 +614,10 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('NN_buz_64s', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
+a = SpikeGraph('J_HIRES_4x16', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
                q_app=app)
 # J_HIRES_4x16
+# NN_buz_64s
 
 palette = QtGui.QPalette()
 palette.setColor(QtGui.QPalette.Background, QtCore.Qt.black)

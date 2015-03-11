@@ -18,12 +18,14 @@ class CircularBuffer(object):
         self.head_idx = 0
         self.buffer_len = columns  # we are using row-major order here (python default and C)
         self.samples = np.zeros(self.shape, dtype=np.float64)
+        self.sample_count = np.uint64(0)  # running count of all the samples that have been added to buffer.
         return
 
     def add_samples(self, new_samples):
         if new_samples.ndim < 2:
             print 'ERROR: the input is expected as a 2D numpy.array().'
         num_new_samples = new_samples.shape[1]
+        self.sample_count += num_new_samples
         # TODO: add functionality for single dimension arrays...
         if num_new_samples >= self.buffer_len:
             print 'Number samples greater than buffer length, clipping new samples to fit buffer!'
@@ -51,7 +53,7 @@ class CircularBuffer(object):
         elif num_samples and tail and not head:  # returns the next n samples after the specified tail. Returns None if not enough samples exist!
             head = (tail + num_samples) % self.buffer_len  # index of last value to display
             if not ((
-                                    self.head_idx > tail and self.head_idx > tail + num_samples) or  # in this case, we have not wrapped around the main buffer, so the head should be absolutely greater.
+                            self.head_idx > tail and self.head_idx > tail + num_samples) or  # in this case, we have not wrapped around the main buffer, so the head should be absolutely greater.
                         (self.head_idx < tail and self.head_idx > head)):
                 return None
         samples = np.zeros((self.shape[0], num_samples), dtype=np.float64)
