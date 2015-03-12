@@ -287,7 +287,7 @@ class SGLInterface256ch(QtCore.QObject):
             num_samples = max_read
             print 'reducing'
         if num_samples == 0:
-            self.data = np.array([], dtype=np.float64)
+            self.data = np.array([[]], dtype=np.float64)
             print 'no data'
             return None
         self.last_sample_read = current_sample

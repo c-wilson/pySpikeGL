@@ -32,7 +32,7 @@ class AbstractSystem(object):
 
 class Acute2System(AbstractSystem):
     def build_window_params(self):
-        window1 = {'channels': np.array([192, 193, 224]),
+        window1 = {'channels': np.array([192, 194, 224]),
                    'channel_fn': ['Sniff', 'Laser', 'FV'],
                    'grid_position': (0, 0, 1, 1),
                    'site_numbers': []

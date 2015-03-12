@@ -64,7 +64,7 @@ class SpikeGraph(QtGui.QWidget):
         self.all_channels, self.channel_labels = self.build_channel_list(probe, system)
         self.buffer = CircularBuffer(len(self.all_channels), self.buffer_len)
         self.disp_samples = np.zeros((len(self.all_channels), self.source.fs * display_period / 1000), dtype=np.float64)
-        self.init_ui(probe, system, self.all_channels, self.channel_labels)
+        self.init_ui(probe, system, self.all_channels)
         self.init_timer()
         self._pause_ui_sig.connect(self.pause_update_ui)
         self.build_filter()
@@ -235,10 +235,8 @@ class SpikeGraph(QtGui.QWidget):
                 self.filter_signal()  # bandpass filter.
             # print 'final' + str(time.time() - self.stime)
             self.graph_trigger.emit()
-        #         print time.time() - self.stime
         self.updating = False
         return
-
 
     def build_filter(self, lp=5000., hp=300.):
         hp_rad = float(hp) / (float(self.source.fs) / 2)
@@ -258,7 +256,8 @@ class SpikeGraph(QtGui.QWidget):
         return
 
     def find_trigger(self):
-        self.th = self.buffer.samples[self.trigger_ch, :] > np.float64(425)  # laser w/ voltage div sits at 396
+        self.th = self.buffer.samples[self.trigger_ch, :] > 0.
+        print np.max(self.buffer.samples[self.trigger_ch, :])
         if np.any(self.th):
             th_edges = np.convolve([1, -1], self.th, mode='same')
             th_idx = np.where(th_edges == 1)  # THIS IS FOR UPWARD EDGES!
@@ -270,10 +269,10 @@ class SpikeGraph(QtGui.QWidget):
                 trig_samp = 0
             elif th_idx < head:
                 trig_samp = sample_count - (head - th_idx)
-            else:  # th_idx > head
+            else:  # th_idx > head, we've wraped around.
                 trig_samp = sample_count - head - (self.buffer.buffer_len - th_idx)
 
-            if trig_samp > self.last_trigger_sample:
+            if trig_samp - self.last_trigger_sample > (20833 * 2):  # two second refractory period.
                 self.triggered = True
                 self.last_trigger_sample = trig_samp
                 self.last_trigger_idx = th_idx
@@ -316,70 +315,58 @@ class SpikeGraph(QtGui.QWidget):
 
     @QtCore.pyqtSlot()
     def set_trigger_channel(self):
-        for radio in self.triggering_radios:
+        for radio in self.trigger_select_radios:
             if radio.isChecked():
                 ch_name = radio.text()
                 actual_ch = self.channel_labels[ch_name]
                 self.trigger_ch = self.all_channels.index(actual_ch)
 
     def build_parent_menu(self):
+
         self.parent_menu_items = QtGui.QWidget()
         self.parent_menu_items_layout = QtGui.QGridLayout(self.parent_menu_items)
         self.parent_menu_items_layout.setMargin(0)
         self.parent_menu_items_layout.setSpacing(0)
-        self.filter_check = QtGui.QCheckBox('Apply filter', self.parent_menu_items)
-        self.filter_check.setChecked(self.filtering)
-        self.filter_check.stateChanged.connect(self.toggle_filter)
-        self.pause_checked = QtGui.QCheckBox('Pause All', self.parent_menu_items)
-        self.pause_checked.setChecked(self.pause)
-        self.pause_checked.stateChanged.connect(self.pause_acquire)
 
-        self.display_period_label = QtGui.QLabel('Display Period:')
-
-        self.display_period_spinbox = QtGui.QSpinBox(self.parent_menu_items)
-        self.display_period_spinbox.setRange(100, 5000)
-        self.display_period_spinbox.setSuffix(' ms')
-        self.display_period_spinbox.setValue(self.display_period)
-        self.display_period_spinbox.setSingleStep(100)
-        self.display_period_spinbox.valueChanged.connect(self.change_display_period)
-        self.line = QtGui.QFrame()
-        self.line.setFrameStyle(QtGui.QFrame.HLine)
-        self.line2 = QtGui.QFrame()
-        self.line2.setFrameStyle(QtGui.QFrame.HLine)
-
-        self.triggering_checkbox = QtGui.QCheckBox('Wait for trigger', self.parent_menu_items)
-        self.triggering_checkbox.setChecked(self.triggering)
-        self.triggering_checkbox.stateChanged.connect(self.toggle_trigger)
-        self.triggering_label = QtGui.QLabel('Trigger offset:')
-
-        # ---- triggering menu---
-        if not hasattr(self, 'triggering_group'):
-            self.triggering_group = QtGui.QFrame(self.parent_menu_items)
-            self.triggering_group.setGeometry(QtCore.QRect(10, 140, 191, 171))
-            self.triggering_gridlayout = QtGui.QGridLayout(self.triggering_group)
-            self.triggering_gridlayout.setMargin(0)
-            self.triggering_gridlayout.setSpacing(0)
-            self.triggering_radios = []
+        if not hasattr(self, 'filter_check'):
+            self.filter_check = QtGui.QCheckBox('Apply filter', self.parent_menu_items)
+            self.pause_checked = QtGui.QCheckBox('Pause All', self.parent_menu_items)
+            self.pause_checked.stateChanged.connect(self.pause_acquire)
+            self.display_period_label = QtGui.QLabel('Display Period:')
+            self.display_period_spinbox = QtGui.QSpinBox(self.parent_menu_items)
+            self.display_period_spinbox.setRange(100, 5000)
+            self.display_period_spinbox.setSuffix(' ms')
+            self.display_period_spinbox.setSingleStep(100)
+            self.display_period_spinbox.valueChanged.connect(self.change_display_period)
+            self.line = QtGui.QFrame()
+            self.line.setFrameStyle(QtGui.QFrame.HLine)
+            self.line2 = QtGui.QFrame()
+            self.line2.setFrameStyle(QtGui.QFrame.HLine)
+            self.triggering_label = QtGui.QLabel('Trigger offset:')
+            self.triggering_checkbox = QtGui.QCheckBox('Wait for trigger', self.parent_menu_items)
+            self.triggering_checkbox.stateChanged.connect(self.toggle_trigger)
+            self.trigger_select_group = QtGui.QFrame(self.parent_menu_items)
+            self.trigger_select_group.setGeometry(QtCore.QRect(10, 140, 191, 171))
+            self.trigger_select_layout = QtGui.QGridLayout(self.trigger_select_group)
+            self.trigger_select_layout.setMargin(0)
+            self.trigger_select_layout.setSpacing(0)
+            self.trigger_select_radios = []
             for i, (label, ch) in enumerate(self.channel_labels.items()):
-                temp = QtGui.QRadioButton(label, self.triggering_group)
+                foo = QtGui.QRadioButton(label, self.trigger_select_group)
                 if self.trigger_ch == self.all_channels.index(ch):
-                    temp.setChecked(True)
-                self.triggering_radios.append(temp)
-                self.triggering_gridlayout.addWidget(temp, i, 0, 1, 1)
-                temp.toggled.connect(self.set_trigger_channel)
+                    foo.setChecked(True)
+                self.trigger_select_radios.append(foo)
+                self.trigger_select_layout.addWidget(foo, i, 0, 1, 1)
+                foo.toggled.connect(self.set_trigger_channel)
             self.triggering_menu = QtGui.QMenu('Trigger source')
             act = QtGui.QWidgetAction(self)
-            act.setDefaultWidget(self.triggering_group)
+            act.setDefaultWidget(self.trigger_select_group)
             self.triggering_menu.addAction(act)
-        #  -------------------
-
-        self.trigger_offset_spinbox = QtGui.QSpinBox(self.parent_menu_items)
-        self.trigger_offset_spinbox.setMinimum(0)
-        self.trigger_offset_spinbox.setMaximum(self.display_period)
-        self.trigger_offset_spinbox.setValue(self.trigger_offset_ms)
-        self.trigger_offset_spinbox.setSingleStep(10)
-        self.trigger_offset_spinbox.setSuffix(' ms')
-        self.trigger_offset_spinbox.valueChanged.connect(self.set_trigger_offset)
+            self.trigger_offset_spinbox = QtGui.QSpinBox(self.parent_menu_items)
+            self.trigger_offset_spinbox.setMinimum(0)
+            self.trigger_offset_spinbox.setSingleStep(10)
+            self.trigger_offset_spinbox.setSuffix(' ms')
+            self.trigger_offset_spinbox.valueChanged.connect(self.set_trigger_offset)
 
         self.parent_menu_items_layout.addWidget(self.filter_check, 1, 0, 1, 1)
         self.parent_menu_items_layout.addWidget(self.pause_checked, 0, 0, 1, 1)
@@ -390,6 +377,16 @@ class SpikeGraph(QtGui.QWidget):
         self.parent_menu_items_layout.addWidget(self.triggering_checkbox, 6, 0, 1, 1)
         self.parent_menu_items_layout.addWidget(self.triggering_label, 7, 0)
         self.parent_menu_items_layout.addWidget(self.trigger_offset_spinbox, 8, 0, 1, 1)
+
+        # ---- Now set some of the values that can change outside the menu and should be refreshed when menu called.
+        self.filter_check.setChecked(self.filtering)
+        self.filter_check.stateChanged.connect(self.toggle_filter)
+        self.pause_checked.setChecked(self.pause)
+        self.display_period_spinbox.setValue(self.display_period)
+        self.triggering_checkbox.setChecked(self.triggering)
+        self.trigger_offset_spinbox.setValue(self.trigger_offset_ms)
+        self.trigger_offset_spinbox.setMaximum(self.display_period)
+
 
 class GraphWidget(galry.GalryWidget):
     def closeEvent(self, e):
