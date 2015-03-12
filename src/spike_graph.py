@@ -257,7 +257,7 @@ class SpikeGraph(QtGui.QWidget):
 
     def find_trigger(self):
         self.th = self.buffer.samples[self.trigger_ch, :] > 0.
-        print np.max(self.buffer.samples[self.trigger_ch, :])
+        # print np.max(self.buffer.samples[self.trigger_ch, :])
         if np.any(self.th):
             th_edges = np.convolve([1, -1], self.th, mode='same')
             th_idx = np.where(th_edges == 1)  # THIS IS FOR UPWARD EDGES!
@@ -271,8 +271,8 @@ class SpikeGraph(QtGui.QWidget):
                 trig_samp = sample_count - (head - th_idx)
             else:  # th_idx > head, we've wraped around.
                 trig_samp = sample_count - head - (self.buffer.buffer_len - th_idx)
-
-            if trig_samp - self.last_trigger_sample > (20833 * 2):  # two second refractory period.
+            if trig_samp > self.last_trigger_sample:
+                # if trig_samp - self.last_trigger_sample > (20833 * 2):  # two second refractory period.
                 self.triggered = True
                 self.last_trigger_sample = trig_samp
                 self.last_trigger_idx = th_idx
@@ -412,7 +412,7 @@ class GraphWidget(galry.GalryWidget):
             chan_map = channel_mapping.index(chan)
             channel_map_array = np.append(channel_map_array, chan_map)
 
-        print channel_map_array
+        # print channel_map_array
         return channel_map_array
 
     def mouseDoubleClickEvent(self, event):
@@ -611,7 +611,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('J_HIRES_4x16', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
+a = SpikeGraph('NN_buz_64s', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
                q_app=app)
 # J_HIRES_4x16
 # NN_buz_64s
