@@ -260,26 +260,17 @@ class SpikeGraph(QtGui.QWidget):
         # print np.max(self.buffer.samples[self.trigger_ch, :])
         if np.any(self.th):
             th_edges = np.convolve([1, -1], self.th, mode='same')
-            th_idx = np.where(th_edges == 1)  # THIS IS FOR UPWARD EDGES!
-            th_idx = th_idx[0][-1]
-            head = self.buffer.head_idx
-            sample_count = self.buffer.sample_count
-
-            if th_idx == head or not th_idx:
-                trig_samp = 0
-            elif th_idx < head:
-                trig_samp = sample_count - (head - th_idx)
-            else:  # th_idx > head, we've wraped around.
-                trig_samp = sample_count - head - (self.buffer.buffer_len - th_idx)
+            th_idxes = np.where(th_edges == 1)[0]  # THIS IS FOR UPWARD EDGES!
+            th_idxes = th_idxes[(th_idxes > 0) & (th_idxes != self.buffer.head_idx)]
+            th_samples = self.buffer.sample_count_array[th_idxes]
+            trig_samp = th_samples.max()
             if trig_samp > self.last_trigger_sample:
-                # if trig_samp - self.last_trigger_sample > (20833 * 2):  # two second refractory period.
-                self.triggered = True
+                self.last_trigger_idx = th_idxes[th_samples == trig_samp]
                 self.last_trigger_sample = trig_samp
-                self.last_trigger_idx = th_idx
-                print 'TRIGGERED!!'
-            else:
-                pass
-            return
+                self.triggered = True  # !!!
+                print "TRIGGERED!!"
+        return
+
 
     @QtCore.pyqtSlot(int)
     def toggle_filter(self, state):
