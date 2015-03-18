@@ -50,20 +50,20 @@ class AbstractProbe(object):
 class J_HIRES_4x16(AbstractProbe):
     def build_window_params(self, interface):
         # NOTE: CHANNEL 2 HERE IS ON THE TOP OF THE SHANK.
-        window1 = {'site_numbers': np.array([2, 15, 1, 16, 4, 13, 3, 14, 6, 11, 5, 12, 8, 9, 7, 10]),
-                   'channels': np.array([24, 38, 23, 40, 25, 39, 22, 31, 26, 16, 21, 17, 27, 18, 28, 19]),
+        window1 = {'site_numbers': np.array([16,  1, 15,  2, 14,  3, 13,  4, 12,  5, 11,  6, 10,  7,  9,  8]),
+                   'channels': np.array([39, 32, 40, 47, 38, 33, 41, 46, 37, 45, 42, 34, 36, 44, 43, 35]),
                    'grid_position': (0, 0, 1, 1)  # (row, column, rowSpan, columnSpan)
         }
-        window2 = {'site_numbers': np.array([18, 31, 17, 32, 20, 29, 19, 30, 22, 27, 21, 28, 24, 25, 23, 26]),
-                   'channels': np.array([41, 20, 37, 29, 42, 30, 36, 32, 43, 47, 35, 33, 44, 46, 34, 45]),
+        window2 = {'site_numbers': np.array([31, 17, 27, 18, 30, 19, 26, 20, 29, 21, 25, 22, 32, 23, 24, 28]),
+                   'channels': np.array([24, 31, 23, 16, 25, 30, 22, 17, 26, 18, 21, 29, 27, 19, 20, 28]),
                    'grid_position': (0, 1, 1, 1)
         }
-        window3 = {'site_numbers': np.array([33, 48, 34, 47, 35, 46, 36, 45, 37, 44, 38, 43, 39, 42, 40, 41]),
-                   'channels': np.array([11, 54, 2, 58, 1, 53, 63, 59, 48, 52, 62, 60, 49, 51, 50, 61]),
+        window3 = {'site_numbers': np.array([48, 34, 47, 38, 46, 35, 45, 39, 44, 36, 43, 40, 42, 33, 37, 41]),
+                   'channels': np.array([ 0,  7, 15,  8,  1,  6, 14,  9, 13,  5,  2, 10, 12,  4,  3, 11]),
                    'grid_position': (1, 1, 1, 1)
         }
-        window4 = {'site_numbers': np.array([49, 64, 50, 63, 51, 62, 52, 61, 53, 60, 54, 59, 55, 58, 56, 57]),
-                   'channels': np.array([57, 7, 55, 8, 56, 6, 0, 9, 15, 5, 14, 10, 13, 4, 12, 3]),
+        window4 = {'site_numbers': np.array([64, 49, 63, 50, 62, 51, 61, 52, 60, 53, 59, 54, 58, 55, 57, 56]),
+                   'channels': np.array([63, 56, 48, 55, 62, 57, 49, 54, 50, 58, 61, 53, 51, 59, 60, 52]),
                    'grid_position': (1, 0, 1, 1)
         }
 
