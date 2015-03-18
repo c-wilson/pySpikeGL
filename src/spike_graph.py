@@ -205,7 +205,6 @@ class SpikeGraph(QtGui.QWidget):
 
     @QtCore.pyqtSlot()
     def update_graphs(self):
-        # self.stime = time.time()
         self.buffer.add_samples(self.source.data)
         #         self.buffer.add_samples(np.random.rand(67,20000))
         # print time.time() - self.stime
@@ -593,7 +592,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
         """Reset the navigation."""
         self.tx, self.ty, self.tz = 0., 0., 0.
         self.sx, self.sy = .01, .01
-        self.scalar = .001
+        self.scalar = 10.
         self.sxl, self.syl = .01, .01
         self.rx, self.ry = 0., 0.
         self.navigation_rectangle = None
@@ -616,9 +615,9 @@ dim_mw = QtCore.QRect(1700, -650, 1000, 1800)
 mw.setGeometry(dim_mw)
 # mw.showFullScreen()
 mw.showMaximized()
-dim_sw = QtCore.QRect(1150, 200, 400, 600)
+dim_sw = QtCore.QRect(1190, -800, 400, 600)
 a.system_window.setGeometry(dim_sw)
-a.system_window.setWindowTitle('Spike-rosoft SPIKESCOPE Control')
+a.system_window.setWindowTitle('Spike-rosoft SPIKESCOPE Aux')
 a.system_window.show()
 
 # p = a.palette()
