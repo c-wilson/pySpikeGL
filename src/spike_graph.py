@@ -41,7 +41,7 @@ class SpikeGraph(QtGui.QWidget):
 
     def __init__(self, probe_type, system_config,
                  refresh_period_ms=1000, display_period=1000,
-                 trigger_ch=66, q_app=None, **kwargs):
+                 trigger_ch=66, q_app=None, trigger_refractory_period_ms=2000, **kwargs):
 
         self.filtering = True
         self.buffer_len = 20833 * 6
@@ -64,6 +64,7 @@ class SpikeGraph(QtGui.QWidget):
         self.all_channels, self.channel_labels = self.build_channel_list(probe, system)
         self.buffer = CircularBuffer(len(self.all_channels), self.buffer_len)
         self.disp_samples = np.zeros((len(self.all_channels), self.source.fs * display_period / 1000), dtype=np.float64)
+        self.trigger_refractory_period = self.source.fs // 1000 * trigger_refractory_period_ms
         self.init_ui(probe, system, self.all_channels)
         self.init_timer()
         self._pause_ui_sig.connect(self.pause_update_ui)
@@ -262,8 +263,8 @@ class SpikeGraph(QtGui.QWidget):
             th_idxes = np.where(th_edges == 1)[0]  # THIS IS FOR UPWARD EDGES!
             th_idxes = th_idxes[(th_idxes > 0) & (th_idxes != self.buffer.head_idx)]
             th_samples = self.buffer.sample_count_array[th_idxes]
-            trig_samp = th_samples.max()
-            if trig_samp > self.last_trigger_sample:
+            trig_samp = th_samples.min()
+            if trig_samp > self.last_trigger_sample + self.trigger_refractory_period:
                 self.last_trigger_idx = th_idxes[th_samples == trig_samp]
                 self.last_trigger_sample = trig_samp
                 self.triggered = True  # !!!
