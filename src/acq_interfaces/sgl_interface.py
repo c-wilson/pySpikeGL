@@ -59,10 +59,10 @@ class SGLInterface256ch(QtCore.QObject):
         if not self.params:
             self.get_params()
 
-        Vdd = self.params['aoRangeMax']
-        Vss = self.params['aoRangeMin']
+        Vdd = self.params['niAiRangeMax']
+        Vss = self.params['niAiRangeMin']
         ADC_bits = 16
-        gain = self.params['auxGain']
+        gain = self.params['niMNGain']
         #
         # Vdd = 2
         # Vss = -2
@@ -84,10 +84,11 @@ class SGLInterface256ch(QtCore.QObject):
         # returns a string of parameters from net_client.
         self.net_client.send_string('GETPARAMS')
         param_string = self.net_client.recieve_ok()
+        # print param_string
         param_list = param_string.splitlines()
         self.params = dict()
         for param in param_list:
-            param_split = param.split(' = ')  # split the keys and the values
+            param_split = param.split('=')  # split the keys and the values
             try:  # convert string into numeric when possible.
                 param_split[1] = int(param_split[1])
             except:
@@ -133,7 +134,7 @@ class SGLInterface256ch(QtCore.QObject):
             return False
 
     def query_acquire(self):
-        self.net_client.send_string('ISACQ')
+        self.net_client.send_string('ISRUNNING')
         re = self.net_client.recieve_ok()
         if int(re) == 1:
             self.acquiring = True
@@ -152,7 +153,7 @@ class SGLInterface256ch(QtCore.QObject):
         done = self.set_params(params)
         if not done:
             return False
-        self.net_client.send_string('STARTACQ\n')
+        self.net_client.send_string('STARTRUN\n')
         time.sleep(.1)
         done = self.net_client.recieve_ok()
         if done == 'OK':
@@ -163,7 +164,7 @@ class SGLInterface256ch(QtCore.QObject):
             return False
 
     def stop_acquire(self):
-        self.net_client.send_string('STOPACQ\n')
+        self.net_client.send_string('STOPRUN\n')
         done = self.net_client.recieve_ok()
         if done == 'OK':
             self.saving = False
@@ -255,11 +256,11 @@ class SGLInterface256ch(QtCore.QObject):
         handshake, _, self.buf = self.bufstr.partition('\n')
         dims = handshake.split(' ')
         # print dims
-        if len(self.buf) < int(dims[2]) * int(dims[3]) + 2:
+        if len(self.buf) < int(dims[1]) * int(dims[2]) + 2:
             self.buf = self.buf + self.net_client.recieve_ok(20971520, close, 20)
             print 'short'
         try:
-            self.data = np.fromstring(self.buf, dtype=np.int16, count=int(dims[3]) * int(dims[2]))
+            self.data = np.fromstring(self.buf, dtype=np.int16, count=int(dims[1]) * int(dims[2]))
             self.data = self.data.astype(np.float64, copy=False)
         except:
             #             print bufstr
@@ -267,7 +268,7 @@ class SGLInterface256ch(QtCore.QObject):
             print 'handshake: ' + handshake
             return None
 
-        self.data.shape = (int(dims[3]), int(dims[2]))
+        self.data.shape = (int(dims[2]), int(dims[1]))
         #         arr.shape = (int(dims[3]),int(dims[2])) THIS WOULD RESHAPE TO BE FORTRANIC.
         self.data = self.data.T * self.adc_scale
         return

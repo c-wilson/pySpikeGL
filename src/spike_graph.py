@@ -262,13 +262,14 @@ class SpikeGraph(QtGui.QWidget):
             th_edges = np.convolve([1, -1], self.th, mode='same')
             th_idxes = np.where(th_edges == 1)[0]  # THIS IS FOR UPWARD EDGES!
             th_idxes = th_idxes[(th_idxes > 0) & (th_idxes != self.buffer.head_idx)]
-            th_samples = self.buffer.sample_count_array[th_idxes]
-            trig_samp = th_samples.min()
-            if trig_samp > self.last_trigger_sample + self.trigger_refractory_period:
-                self.last_trigger_idx = th_idxes[th_samples == trig_samp]
-                self.last_trigger_sample = trig_samp
-                self.triggered = True  # !!!
-                print "TRIGGERED!!"
+            if len(th_idxes):
+                th_samples = self.buffer.sample_count_array[th_idxes]
+                trig_samp = th_samples.min()
+                if trig_samp > self.last_trigger_sample + self.trigger_refractory_period:
+                    self.last_trigger_idx = th_idxes[th_samples == trig_samp]
+                    self.last_trigger_sample = trig_samp
+                    self.triggered = True  # !!!
+                    print "TRIGGERED!!"
         return
 
 
@@ -572,8 +573,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
             else:
                 dx = dy = 0
         self.sx *= np.exp(dx)
-        self.scalar *= np.exp(
-            dy)  # this allows us to change the scaling on the y axis outside of the zoom function.
+        self.scalar *= np.exp(dy)  # this allows us to change the scaling on the y axis outside of the zoom function.
         # self.sy *= np.exp(dy)
 
         # constrain scaling
