@@ -47,6 +47,24 @@ class AbstractProbe(object):
         return
 
 
+class NN_A2x32_poly5(AbstractProbe):
+    def build_window_params(self, acquisition_interface):
+        window1 = {'site_numbers': np.array([7, 26, 1, 14, 32, 8, 25, 2, 19, 31, 9, 24, 3, 15, 30, 10, 23, 4, 18, 29,
+                                             11, 22, 5, 16, 28, 12, 21, 6, 17, 27, 13, 20]),
+                   'channels': np.array([25, 61, 24, 54, 20, 17, 60, 26, 57, 23, 27, 63, 21, 31, 22, 16, 59, 28, 52,
+                                         50, 18, 62, 19, 53, 49, 55, 58, 29, 56, 48, 30, 51]),
+                   'grid_position': (0, 0, 1, 1)  # (row, column, rowSpan, columnSpan)
+                   }
+
+        window2 = {'site_numbers': np.array([39, 58, 33, 46, 64, 40, 57, 34, 51, 63, 41, 56, 35, 47, 62, 42, 55, 36,
+                                             50, 61, 43, 54, 37, 48, 60, 44, 53, 38, 49, 59, 45, 52]),
+                   'channels': np.array([34, 6, 11, 38, 7, 35, 14, 8, 41, 5, 32, 4, 9, 43, 10, 36, 15, 45, 0, 3, 33,
+                                         13, 46, 39, 12, 37, 40, 47, 42, 2, 44, 1]),
+                   'grid_position': (0, 1, 1, 1)
+                   }
+        return (window1, window2)
+
+
 class J_HIRES_4x16(AbstractProbe):
     def build_window_params(self, interface):
         # NOTE: CHANNEL 2 HERE IS ON THE TOP OF THE SHANK.
@@ -107,4 +125,5 @@ class NN_buz_64s(AbstractProbe):
 
 
 probes = {'J_HIRES_4x16': J_HIRES_4x16(),
-          'NN_buz_64s': NN_buz_64s()}  # we'll import this...
+          'NN_buz_64s': NN_buz_64s(),
+          'NN_A2x32_poly5': NN_A2x32_poly5()}  # we'll import this...

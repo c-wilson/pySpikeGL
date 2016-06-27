@@ -593,7 +593,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
         """Reset the navigation."""
         self.tx, self.ty, self.tz = 0., 0., 0.
         self.sx, self.sy = .01, .01
-        self.scalar = 10.
+        self.scalar = 500.
         self.sxl, self.syl = .01, .01
         self.rx, self.ry = 0., 0.
         self.navigation_rectangle = None
@@ -602,7 +602,7 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
-a = SpikeGraph('NN_buz_64s', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
+a = SpikeGraph('NN_A2x32_poly5', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
                q_app=app)
 # J_HIRES_4x16
 # NN_buz_64s

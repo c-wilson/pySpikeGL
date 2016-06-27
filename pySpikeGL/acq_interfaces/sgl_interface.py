@@ -3,6 +3,7 @@ Created on Jun 13, 2014
 
 @author: Chris Wilson
 '''
+import os
 import socket
 import time
 import numpy as np
@@ -35,10 +36,11 @@ class SGLInterface256ch(QtCore.QObject):
     params = None
     adc_scale = None
 
-    channel_order = {'64ch': {'connector_1': [24, 25, 26, 27, 28, 30,  0,  2,  4,  6, 29, 31,  1,  3,  5,  7, 45,
-                                              47, 49, 51, 53, 55, 40, 41, 42, 43, 44, 46, 48, 50, 52, 54],
-                              'connector_2': [23, 22, 21, 20, 19, 17, 16, 15, 14, 13, 18, 12,  8, 11, 10,  9, 34,
-                                              60, 56, 59, 58, 57, 39, 38, 37, 36, 35, 33, 32, 63, 62, 61]}}
+    # Channel order is the SGL channel that corresponds to the NN site.
+    NN_channel_order = [24, 26, 21, 28, 19, 29, 25, 17, 27, 16, 18, 55, 30, 54, 31, 53, 56, 52, 57, 51, 58, 62, 59, 63,
+                        60, 61, 48, 49, 50, 22, 23, 20, 11, 8, 9, 45, 46, 47, 34, 35, 32, 36, 33, 37, 44, 38, 43, 39,
+                        42, 0, 41, 1, 40, 13, 15, 4, 14, 6, 2, 12, 3, 10, 5, 7]
+    NN_channel_order_128 = NN_channel_order.extend([x + 64 for x in NN_channel_order])
 
     def __init__(self, **kwargs):
         '''
@@ -47,7 +49,7 @@ class SGLInterface256ch(QtCore.QObject):
         super(SGLInterface256ch, self).__init__()
         self.net_client = NetClient()
         self.query_acquire()
-        self.fs = 20833
+        self.fs = 25000
         return
 
 
@@ -123,11 +125,25 @@ class SGLInterface256ch(QtCore.QObject):
             print type(filename)
             print filename
             print 'SPIKEGL FILENAME MUST BE A VALID STRING.'
-        sendstring = 'SETSAVEFILE ' + filename
+
+        d, n = os.path.split(filename)
+        print d
+        if d:
+            d2 = d.replace("\\", "/")
+            sendstring = "SETRUNDIR {0}".format(d2)
+            self.net_client.send_string(sendstring)
+            ok = self.net_client.recieve_ok()
+            if ok == 'OK':
+                print 'SpikeGL save directory set: {0}.'.format(d2)
+            else:
+                print 'SpikeGL save directory NOT SET'
+                return False
+
+        sendstring = "SETRUNNAME {0}".format(n)
         self.net_client.send_string(sendstring)
         ok = self.net_client.recieve_ok()
         if ok == 'OK':
-            print 'SpikeGL save filename set.'
+            print 'SpikeGL save filename set: {0}'.format(n)
             return True
         else:
             print 'SpikeGL save filename NOT SET'
@@ -182,16 +198,16 @@ class SGLInterface256ch(QtCore.QObject):
             self.saving = False
         return self.saving
 
-    def start_save(self, filename=None):
+    def start_save(self, filename):
         if self.query_save():
             return True
         if not self.query_acquire():
             return False
-        if filename:
-            name_set = self.set_save_file(filename)
-            if not name_set:
-                return False
-        self.net_client.send_string('SETSAVING 1')
+
+        name_set = self.set_save_file(filename)
+        if not name_set:
+            return False
+        self.net_client.send_string('SETRECORDENAB 1')
         done = self.net_client.recieve_ok()
         if done == 'OK':
             self.saving = True
@@ -202,7 +218,8 @@ class SGLInterface256ch(QtCore.QObject):
             return False
 
     def stop_save(self):
-        self.net_client.send_string('SETSAVING 0')
+        pass  # BECAUSE OF SGLX BUG!
+        self.net_client.send_string('SETRECORDENAB 0')
         done = self.net_client.recieve_ok()
         if done:
             self.saving = False
@@ -226,11 +243,11 @@ class SGLInterface256ch(QtCore.QObject):
     def get_scancount(self, close=True):
         if not self.acquiring and not self.query_acquire():
             return False
-        self.net_client.send_string('GETSCANCOUNT')
+        self.net_client.send_string('GETSCANCOUNTNI')
         return int(self.net_client.recieve_ok(close=close))
 
     def query_channels(self):
-        self.net_client.send_string('GETCHANNELSUBSET')
+        self.net_client.send_string('GETSAVECHANSNI')
         self.channels = self.net_client.recieve_ok()
         return self.channels
 
@@ -248,7 +265,8 @@ class SGLInterface256ch(QtCore.QObject):
         chan_str = ''
         for ch in channels:
             chan_str = chan_str + str(ch) + '#'
-        line = 'GETDAQDATA ' + str(start_sample) + ' ' + str(num_samples) + ' ' + chan_str + ' 1'
+        # line = 'FETCHNI {0} {1} {2}'
+        line = 'FETCHNI ' + str(start_sample) + ' ' + str(num_samples) + ' ' + chan_str + ' 1'
         # print line
         self.net_client.send_string(line)
         self.bufstr = self.net_client.recieve_ok(1048576, close, 1000, True)
@@ -312,6 +330,7 @@ class NetClient(object):
             self.connect()
             self.close()
         except socket.error as msg:
+            print msg
             self.close()
         return
 
