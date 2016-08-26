@@ -41,10 +41,10 @@ class SpikeGraph(QtGui.QWidget):
 
     def __init__(self, probe_type, system_config,
                  refresh_period_ms=1000, display_period=1000,
-                 trigger_ch=66, q_app=None, trigger_refractory_period_ms=2000, **kwargs):
+                 trigger_ch=65, q_app=None, trigger_refractory_period_ms=1000, **kwargs):
 
         self.filtering = True
-        self.buffer_len = 20833 * 6
+        self.buffer_len = 25000 * 6
         self.triggering = False
         self.last_trigger_idx = 0
         self.last_trigger_sample = np.uint64(0)
@@ -228,7 +228,11 @@ class SpikeGraph(QtGui.QWidget):
                             self.last_trigger_idx - trigger_offset_samples) % self.buffer.buffer_len  # index of first sample to display.
 
             # IMPORTANT: the Buffer returns None if the number of samples is not there, so it will not update the display.
-            self.disp_samples = self.buffer.sample_range(disp_period_sample_num, tail=disp_tail_idx)
+
+            if self.buffer.sample_count_array.min() > self.last_trigger_sample:
+                self.triggered = False
+            else:
+                self.disp_samples = self.buffer.sample_range(disp_period_sample_num, tail=disp_tail_idx)
         if self.disp_samples is not None:
             self.triggered = False  # we've acted on the trigger, so we will start looking for new triggers next time.
             if self.filtering:
@@ -249,24 +253,24 @@ class SpikeGraph(QtGui.QWidget):
 
     def filter_signal(self):
         if self.filtering:
-            self.disp_samples[:self.e_phys_channel_number, :] = signal.filtfilt(self.signal_filter[0],
-                                                                                self.signal_filter[1],
+            self.disp_samples[:self.e_phys_channel_number, :] = signal.lfilter(self.signal_filter[0],
+                                                                               self.signal_filter[1],
                                                                                 self.disp_samples[
                                                                                 :self.e_phys_channel_number, :])
         return
 
     def find_trigger(self):
-        self.th = self.buffer.samples[self.trigger_ch, :] > 0.
-        # print np.max(self.buffer.samples[self.trigger_ch, :])
+        self.th = self.buffer.samples[self.trigger_ch, :] > .005
+        print np.max(self.buffer.samples[self.trigger_ch, :])
         if np.any(self.th):
             th_edges = np.convolve([1, -1], self.th, mode='same')
             th_idxes = np.where(th_edges == 1)[0]  # THIS IS FOR UPWARD EDGES!
             th_idxes = th_idxes[(th_idxes > 0) & (th_idxes != self.buffer.head_idx)]
             if len(th_idxes):
                 th_samples = self.buffer.sample_count_array[th_idxes]
-                trig_samp = th_samples.min()
+                trig_samp = th_samples.max()
                 if trig_samp > self.last_trigger_sample + self.trigger_refractory_period:
-                    self.last_trigger_idx = th_idxes[th_samples == trig_samp]
+                    self.last_trigger_idx = th_idxes[th_samples == trig_samp][0]
                     self.last_trigger_sample = trig_samp
                     self.triggered = True  # !!!
                     print "TRIGGERED!!"
@@ -602,6 +606,8 @@ class MyNavigationEventProcessor(galry.NavigationEventProcessor):
 
 app = QtGui.QApplication([])
 mw = Main()
+# 'NN_A2x32_poly5'
+# 'J_RS6'
 a = SpikeGraph('NN_A2x32_poly5', 'acute2', acquisition_source='SpikeGL', refresh_period_ms=1000, display_period=2000,
                q_app=app)
 # J_HIRES_4x16

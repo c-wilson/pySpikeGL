@@ -124,6 +124,21 @@ class NN_buz_64s(AbstractProbe):
         self.data['non_displayed_chans'] = np.array([45, 34, 47, 46])
 
 
+class RS6(AbstractProbe):
+    def build_window_params(self, acquisition_interface):
+        window1 = {'site_numbers': np.arange(32),
+                   'channels': np.arange(32),
+                   'grid_position': (0, 0, 1, 1)  # (row, column, rowSpan, columnSpan)
+                   }
+        return (window1,)
+
+    def __init__(self):
+        super(RS6, self).__init__()
+        # self.data['non_displayed_chans'] = np.array([45, 34, 47, 46])
+
+
+
 probes = {'J_HIRES_4x16': J_HIRES_4x16(),
           'NN_buz_64s': NN_buz_64s(),
-          'NN_A2x32_poly5': NN_A2x32_poly5()}  # we'll import this...
+          'NN_A2x32_poly5': NN_A2x32_poly5(),
+          'J_RS6': RS6()}  # we'll import this...
